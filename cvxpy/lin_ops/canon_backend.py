@@ -26,7 +26,7 @@ from scipy.signal import convolve
 
 from cvxpy.lin_ops import LinOp
 from cvxpy.settings import RUST_CANON_BACKEND, SCIPY_CANON_BACKEND, \
-                           NUMPY_CANON_BACKEND, STACKED_SLICES_CANON_BACKEND
+    NUMPY_CANON_BACKEND, STACKED_SLICES_CANON_BACKEND
 
 
 class Constant(Enum):
@@ -62,10 +62,10 @@ class TensorRepresentation:
 
     def __eq__(self, other: TensorRepresentation) -> bool:
         return isinstance(other, TensorRepresentation) and \
-            np.all(self.data == other.data) and \
-            np.all(self.row == other.row) and \
-            np.all(self.col == other.col) and \
-            np.all(self.parameter_offset == other.parameter_offset)
+               np.all(self.data == other.data) and \
+               np.all(self.row == other.row) and \
+               np.all(self.col == other.col) and \
+               np.all(self.parameter_offset == other.parameter_offset)
 
 
 class CanonBackend(ABC):
@@ -327,7 +327,7 @@ class PythonCanonBackend(CanonBackend):
         Given (A, b) in view, return (-A, -b).
         """
 
-        def func(x):
+        def func(x, _p=1):
             return -x
 
         view.apply_all(func)
@@ -1161,14 +1161,29 @@ class StackedSlicesBackend(PythonCanonBackend):
     def kron_l(self, lin: LinOp, view: TensorView) -> TensorView:
         pass
 
-    def get_variable_tensor(self, shape: tuple[int, ...], variable_id: int) -> Any:
-        pass
+    def get_variable_tensor(self, shape: tuple[int, ...], variable_id: int) -> \
+            dict[int, dict[int, sp.csr_matrix]]:
+        assert variable_id != Constant.ID
+        n = int(np.prod(shape))
+        return {variable_id: {Constant.ID.value: sp.eye(n, format="csr")}}
 
-    def get_data_tensor(self, data: Any) -> Any:
-        pass
+    def get_data_tensor(self, data: np.ndarray | sp.spmatrix) -> \
+            dict[int, dict[int, sp.csr_matrix]]:
+        if isinstance(data, np.ndarray):
+            # Slightly faster compared to reshaping after casting
+            tensor = sp.csr_matrix(data.reshape((-1, 1), order="F"))
+        else:
+            tensor = sp.coo_matrix(data).reshape((-1, 1), order="F").tocsr()
+        return {Constant.ID.value: {Constant.ID.value: tensor}}
 
-    def get_param_tensor(self, shape: tuple[int, ...], parameter_id: int) -> Any:
-        pass
+    def get_param_tensor(self, shape: tuple[int, ...], parameter_id: int) -> \
+            dict[int, dict[int, sp.csr_matrix]]:
+        assert parameter_id != Constant.ID
+        param_size = self.param_to_size[parameter_id]
+        shape = (int(np.prod(shape) * param_size), 1)
+        arg = np.ones(param_size), (np.arange(param_size) + np.arange(param_size) * param_size, np.zeros(param_size))
+        param_vec = sp.coo_matrix(arg, shape)
+        return {Constant.ID.value: {parameter_id: param_vec}}
 
 
 class TensorView(ABC):
@@ -1311,7 +1326,11 @@ class DictTensorView(TensorView, ABC):
 
     @staticmethod
     @abstractmethod
+<<<<<<< HEAD
     def add_tensors(a: Any, b: Any) -> Any:
+=======
+    def add_tensors(a: Any | None, b: Any | None):
+>>>>>>> re-implemeting PoC for TensorView of stacked-slices
         pass  # noqa
 
     @staticmethod
@@ -1334,7 +1353,11 @@ class DictTensorView(TensorView, ABC):
                 assert len(a[key]) == len(b[key])
                 res[key] = self.add_tensors(a[key], b[key])
             else:
+<<<<<<< HEAD
                 raise ValueError(f'Values must either be dicts or {self.tensor_type()}.')
+=======
+                raise ValueError('Values must either be dicts or {}.', self.tensor_type())
+>>>>>>> re-implemeting PoC for TensorView of stacked-slices
         for key in keys_a - intersect:
             res[key] = a[key]
         for key in keys_b - intersect:
@@ -1470,26 +1493,73 @@ class NumpyTensorView(DictTensorView):
 
 
 class StackedSlicesTensorView(DictTensorView):
-    @staticmethod
-    def add_tensors(a: Any | None, b: Any | None):
-        pass
-
-    @staticmethod
-    def tensor_type():
-        pass
 
     @property
     def rows(self) -> int:
-        pass
+        if self.tensor is not None:
+            for var_id, param_dict in self.tensor.items():
+                for param_id, param_mat in param_dict.items():
+                    return param_mat.shape[0] // self.param_to_size[param_id]
+        else:
+            raise ValueError('Tensor cannot be None')
 
     def get_tensor_representation(self, row_offset: int) -> TensorRepresentation:
-        pass
+        """
+        Returns a TensorRepresentation of [A b] tensor.
+        """
+        assert self.tensor is not None
+        tensor_representations = []
+        for variable_id, variable_tensor in self.tensor.items():
+            for parameter_id, parameter_matrix in variable_tensor.items():
+                p = self.param_to_size[parameter_id]
+                m = parameter_matrix.shape[0] // p
+                coo_repr = parameter_matrix.tocoo(copy=False)
+                tensor_representations.append(TensorRepresentation(
+                    coo_repr.data,
+                    (coo_repr.row % m) + row_offset,
+                    coo_repr.col + self.id_to_col[variable_id],
+                    coo_repr.row // m,
+                ))
+        return TensorRepresentation.combine(tensor_representations)
 
     def select_rows(self, rows: np.ndarray) -> None:
-        pass
+        def func(x, p):
+            if p == 1:
+                return x[rows, :]
+            else:
+                m = x.shape[0]
+                return x[np.tile(rows, p) + np.tile(np.arange(p) * m, p), :]
+
+        self.apply_all(func)
 
     def apply_all(self, func: Callable) -> None:
-        pass
+        self.tensor = {var_id: {k: func(v, self.param_to_size[k])
+                                for k, v in parameter_repr.items()}
+                       for var_id, parameter_repr in self.tensor.items()}
 
-    def create_new_tensor_view(self, variable_ids: set[int], tensor: Any, is_parameter_free: bool) -> TensorView:
-        pass
+    def create_new_tensor_view(self, variable_ids: set[int], tensor: Any,
+                               is_parameter_free: bool) -> StackedSlicesTensorView:
+        return StackedSlicesTensorView(variable_ids, tensor, is_parameter_free, self.param_size_plus_one,
+                                       self.id_to_col, self.param_to_size, self.param_to_col,
+                                       self.var_length)
+
+    @staticmethod
+    def apply_to_parameters(self, func: Callable,
+                            parameter_representation: dict[int, sp.csr_matrix]) \
+            -> dict[int, sp.csr_matrix]:
+        """
+        Apply 'func' to each slice of the parameter representation.
+        """
+        return {k: func(v, self.param_to_size[k]) for k, v in parameter_representation.items()}
+
+    @staticmethod
+    def add_tensors(a: Any | None, b: Any | None):
+        return a + b
+
+    @staticmethod
+    def tensor_type():
+        """
+        The tensor representation of the stacked slices backend is one big
+        sparse matrix instead of smaller sparse matrices in a list.
+        """
+        return sp.spmatrix
