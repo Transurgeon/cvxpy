@@ -1127,7 +1127,7 @@ class StackedSlicesBackend(PythonCanonBackend):
     def reshape_constant_data(constant_data: Any, new_shape: tuple[int, ...]) -> Any:
         pass
 
-    def concatenate_tensors(self, tensors: list[TensorRepresentation]) -> TensorView:
+    def concatenate_tensors(self, tensors: list[TensorRepresentation]) -> StackedSlicesTensorView:
         pass
 
     def reshape_tensors(self, tensor: TensorView, total_rows: int) -> sp.csc_matrix:
@@ -1136,45 +1136,88 @@ class StackedSlicesBackend(PythonCanonBackend):
     def get_empty_view(self) -> TensorView:
         pass
 
-    def mul(self, lin: LinOp, view: TensorView) -> TensorView:
+    def mul(self, lin: LinOp, view: StackedSlicesTensorView) -> StackedSlicesTensorView:
         pass
 
     @staticmethod
-    def promote(lin: LinOp, view: TensorView) -> TensorView:
-        pass
+    def promote(lin: LinOp, view: StackedSlicesTensorView) -> StackedSlicesTensorView:
+        num_entries = int(np.prod(lin.shape))
 
-    def mul_elem(self, lin: LinOp, view: TensorView) -> TensorView:
+        def func(x, p):
+            if p == 1:
+                return x[np.zeros(num_entries, dtype=int), :]
+            else:
+                n = x.shape[1]
+                return x[np.zeros(num_entries, dtype=int), :]
+
+        view.apply_all(func)
+        return view
+
+    def mul_elem(self, lin: LinOp, view: StackedSlicesTensorView) -> StackedSlicesTensorView:
         pass
 
     @staticmethod
-    def sum_entries(_lin: LinOp, view: TensorView) -> TensorView:
-        pass
+    def sum_entries(_lin: LinOp, view: StackedSlicesTensorView) -> StackedSlicesTensorView:
+        def func(x, p):
+            if p == 1:
+                return sp.csr_matrix(x.sum(axis=0))
+            else:
+                n = x.shape[1]
+                ones = sp.csr_matrix((np.ones(n), (np.zeros(n), np.arange(n))), shape=(1, n))
+                return (sp.kron(sp.eye(p, format="csr"), ones) @ x).tocsr()
 
-    def div(self, lin: LinOp, view: TensorView) -> TensorView:
+        view.apply_all(func)
+        return view
+
+    def div(self, lin: LinOp, view: StackedSlicesTensorView) -> StackedSlicesTensorView:
         pass
 
     @staticmethod
-    def diag_vec(lin: LinOp, view: TensorView) -> TensorView:
-        pass
+    def diag_vec(lin: LinOp, view: StackedSlicesTensorView) -> StackedSlicesTensorView:
+        assert lin.shape[0] == lin.shape[1]
+        k = lin.data
+        rows = lin.shape[0]
+        total_rows = int(lin.shape[0] ** 2)
+
+        def func(x, _p):
+            shape = list(x.shape)
+            shape[0] = total_rows
+            x = x.tocoo()
+            if k == 0:
+                new_rows = (x.row * (rows + 1)).astype(int)
+            elif k > 0:
+                new_rows = (x.row * (rows + 1) + rows * k).astype(int)
+            else:
+                new_rows = (x.row * (rows + 1) - k).astype(int)
+            return sp.csr_matrix((x.data, (new_rows, x.col)), shape)
+
+        view.apply_all(func)
+        return view
 
     @staticmethod
     def get_stack_func(total_rows: int, offset: int) -> Callable:
-        pass
+        def stack_func(tensor, _p):
+            coo_repr = tensor.tocoo()
+            new_rows = (coo_repr.row + offset).astype(int)
+            return sp.csr_matrix((coo_repr.data, (new_rows, coo_repr.col)),
+                                 shape=(int(total_rows), tensor.shape[1]))
 
-    def rmul(self, lin: LinOp, view: TensorView) -> TensorView:
+        return stack_func
+
+    def rmul(self, lin: LinOp, view: StackedSlicesTensorView) -> StackedSlicesTensorView:
         pass
 
     @staticmethod
-    def trace(lin: LinOp, view: TensorView) -> TensorView:
+    def trace(lin: LinOp, view: StackedSlicesTensorView) -> StackedSlicesTensorView:
         pass
 
-    def conv(self, lin: LinOp, view: TensorView) -> TensorView:
+    def conv(self, lin: LinOp, view: StackedSlicesTensorView) -> StackedSlicesTensorView:
         pass
 
-    def kron_r(self, lin: LinOp, view: TensorView) -> TensorView:
+    def kron_r(self, lin: LinOp, view: StackedSlicesTensorView) -> StackedSlicesTensorView:
         pass
 
-    def kron_l(self, lin: LinOp, view: TensorView) -> TensorView:
+    def kron_l(self, lin: LinOp, view: StackedSlicesTensorView) -> StackedSlicesTensorView:
         pass
 
     def get_variable_tensor(self, shape: tuple[int, ...], variable_id: int) -> \
