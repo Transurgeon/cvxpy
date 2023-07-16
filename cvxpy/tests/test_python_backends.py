@@ -10,13 +10,12 @@ import scipy.sparse as sp
 import cvxpy.settings as s
 from cvxpy.lin_ops.canon_backend import (
     CanonBackend,
-    ScipyCanonBackend,
     NumpyCanonBackend,
     StackedSlicesBackend,
-    ScipyTensorView,
-    NumpyTensorView,
-    DictTensorView,
     StackedSlicesTensorView,
+    NumpyTensorView,
+    ScipyCanonBackend,
+    ScipyTensorView,
     TensorRepresentation,
 )
 
@@ -153,57 +152,6 @@ class TestBackends:
         assert isinstance(func, Callable)
         with pytest.raises(KeyError):
             backend.get_func('notafunc')
-
-    def test_gettensor(self, scipy_backend):
-        outer = scipy_backend.get_variable_tensor((2,), 1)
-        assert outer.keys() == {1}, "Should only be in variable with ID 1"
-        inner = outer[1]
-        assert inner.keys() == {-1}, "Should only be in parameter slice -1, i.e. non parametrized."
-        tensors = inner[-1]
-        assert isinstance(tensors, list), "Should be list of tensors"
-        assert len(tensors) == 1, "Should be a single tensor"
-        assert (tensors[0] != sp.eye(2, format='csr')).nnz == 0, "Should be eye(2)"
-
-    @pytest.mark.parametrize('data', [np.array([[1, 2], [3, 4]]), sp.eye(2) * 4])
-    def test_get_data_tensor(self, scipy_backend, data):
-        outer = scipy_backend.get_data_tensor(data)
-        assert outer.keys() == {-1}, "Should only be constant variable ID."
-        inner = outer[-1]
-        assert inner.keys() == {-1}, "Should only be in parameter slice -1, i.e. non parametrized."
-        tensors = inner[-1]
-        assert isinstance(tensors, list), "Should be list of tensors"
-        assert len(tensors) == 1, "Should be a single tensor"
-        expected = sp.csr_matrix(data.reshape((-1, 1), order="F"))
-        assert (tensors[0] != expected).nnz == 0
-
-    def test_get_param_tensor(self, scipy_backend):
-        shape = (2, 2)
-        size = np.prod(shape)
-        outer = scipy_backend.get_param_tensor(shape, 3)
-        assert outer.keys() == {-1}, "Should only be constant variable ID."
-        inner = outer[-1]
-        assert inner.keys() == {3}, "Should only be the parameter slice of parameter with id 3."
-        tensors = inner[3]
-        assert isinstance(tensors, list), "Should be list of tensors"
-        assert len(tensors) == size, "Should be a tensor for each element of the parameter"
-        assert (sp.hstack(tensors) != sp.eye(size, format='csr')).nnz == 0, \
-            'Should be eye(4) along axes 1 and 2'
-
-    """def test_scipy_tensor_view_combine_potentially_none(self, arg_view):
-        assert arg_view.combine_potentially_none(None, None) is None
-        a = {"a": [1]}
-        b = {"b": [2]}
-        assert ScipyTensorView.combine_potentially_none(a, None) == a
-        assert ScipyTensorView.combine_potentially_none(None, a) == a
-        assert ScipyTensorView.combine_potentially_none(a, b) == ScipyTensorView.add_dicts(a, b)
-
-    def test_scipy_tensor_view_add_dicts(self, arg_view):
-        assert ScipyTensorView.add_dicts({}, {}) == {}
-        assert ScipyTensorView.add_dicts({"a": [1]}, {"a": [2]}) == {"a": [3]}
-        assert ScipyTensorView.add_dicts({"a": [1]}, {"b": [2]}) == {"a": [1], "b": [2]}
-        assert ScipyTensorView.add_dicts({"a": {"c": [1]}}, {"a": {"c": [1]}}) == {'a': {'c': [2]}}
-        with pytest.raises(ValueError, match="Values must either be dicts or lists"):
-            ScipyTensorView.add_dicts({"a": 1}, {"a": 2})"""
 
     def test_neg(self, backend, arg_view):
         """
@@ -630,7 +578,7 @@ class TestBackends:
         [[1  0],
          [0  1]]
 
-        sum_entries(x) means we consider the entries in all rows, i.e., we sum along axis 0.
+        sum_entries(x) means we consider the entries in all rows, i.e., we sum along the row axis.
 
         Thus, when using the same columns as before, we now have
 
@@ -659,6 +607,61 @@ class TestBackends:
 
         # Note: view is edited in-place:
         assert out_view.get_tensor_representation(0) == view.get_tensor_representation(0)
+
+    def test_parametrized_sum_entries_(self, backend, arg_view):
+        """
+        starting with a parametrized expression
+        x1  x2
+        [[[1  0],
+         [0  0]],
+
+         [[0  0],
+         [0  1]]]
+
+        sum_entries(x) means we consider the entries in all rows, i.e., we sum along the row axis.
+
+        Thus, when using the same columns as before, we now have
+
+         x1  x2
+        [[[1  0]],
+
+         [[0  1]]]
+        """
+        param_size_plus_one = 3
+        id_to_col = {1: 0}
+        param_to_size = {-1: 1, 2: 2}
+        param_to_col = {2: 0, -1: 3}
+        var_length = 2
+
+        param_lin_op = linOpHelper((2,), type='param', data=2)
+        empty_view = arg_view(param_size_plus_one, id_to_col,
+                              param_to_size, param_to_col,
+                              var_length)
+
+        variable_lin_op = linOpHelper((2,), type='variable', data=1)
+        var_view = backend.process_constraint(variable_lin_op, empty_view)
+        mul_elem_lin_op = linOpHelper(data=param_lin_op)
+        param_var_view = backend.mul_elem(mul_elem_lin_op, var_view)
+
+        sum_entries_lin_op = linOpHelper()
+        out_view = backend.sum_entries(sum_entries_lin_op, param_var_view)
+
+        slice_idx_zero = out_view.tensor[1][2][0]
+        slice_idx_zero = NumpyCanonBackend._to_dense(slice_idx_zero)
+        expected_idx_zero = np.array(
+            [[1., 0.]]
+        )
+        assert np.all(slice_idx_zero == expected_idx_zero)
+
+        slice_idx_one = out_view.tensor[1][2][1]
+        slice_idx_one = NumpyCanonBackend._to_dense(slice_idx_one)
+        expected_idx_one = np.array(
+            [[0., 1.]]
+        )
+        assert np.all(slice_idx_one == expected_idx_one)
+
+        # Note: view is edited in-place:
+        assert out_view.get_tensor_representation(0) == param_var_view.get_tensor_representation(0)
 
     def test_promote(self, backend, arg_view):
         """
@@ -878,8 +881,7 @@ class TestBackends:
 
         # indices are: variable 1, parameter 2, 0 index of the list
         slice_idx_zero = out_view.tensor[1][2][0]
-        if not isinstance(slice_idx_zero, np.ndarray):
-            slice_idx_zero = slice_idx_zero.toarray()
+        slice_idx_zero = NumpyCanonBackend._to_dense(slice_idx_zero)
         expected_idx_zero = np.array(
             [[1., 0., 0., 0.],
              [0., 0., 0., 0.],
@@ -890,8 +892,7 @@ class TestBackends:
 
         # indices are: variable 1, parameter 2, 1 index of the list
         slice_idx_one = out_view.tensor[1][2][1]
-        if not isinstance(slice_idx_one, np.ndarray):
-            slice_idx_one = slice_idx_one.toarray()
+        slice_idx_one = NumpyCanonBackend._to_dense(slice_idx_one)
         expected_idx_one = np.array(
             [[0., 0., 0., 0.],
              [1., 0., 0., 0.],
@@ -902,8 +903,7 @@ class TestBackends:
 
         # indices are: variable 1, parameter 2, 2 index of the list
         slice_idx_two = out_view.tensor[1][2][2]
-        if not isinstance(slice_idx_two, np.ndarray):
-            slice_idx_two = slice_idx_two.toarray()
+        slice_idx_two = NumpyCanonBackend._to_dense(slice_idx_two)
         expected_idx_two = np.array(
             [[0., 1., 0., 0.],
              [0., 0., 0., 0.],
@@ -914,8 +914,7 @@ class TestBackends:
 
         # indices are: variable 1, parameter 2, 3 index of the list
         slice_idx_three = out_view.tensor[1][2][3]
-        if not isinstance(slice_idx_three, np.ndarray):
-            slice_idx_three = slice_idx_three.toarray()
+        slice_idx_three = NumpyCanonBackend._to_dense(slice_idx_three)
         expected_idx_three = np.array(
             [[0., 0., 0., 0.],
              [0., 1., 0., 0.],
@@ -1019,8 +1018,7 @@ class TestBackends:
 
         # indices are: variable 1, parameter 2, 0 index of the list
         slice_idx_zero = out_view.tensor[1][2][0]
-        if not isinstance(slice_idx_zero, np.ndarray):
-            slice_idx_zero = slice_idx_zero.toarray()
+        slice_idx_zero = NumpyCanonBackend._to_dense(slice_idx_zero)
         expected_idx_zero = np.array(
             [[1, 0, 0, 0],
              [0, 1, 0, 0]]
@@ -1029,8 +1027,7 @@ class TestBackends:
 
         # indices are: variable 1, parameter 2, 1 index of the list
         slice_idx_one = out_view.tensor[1][2][1]
-        if not isinstance(slice_idx_one, np.ndarray):
-            slice_idx_one = slice_idx_one.toarray()
+        slice_idx_one = NumpyCanonBackend._to_dense(slice_idx_one)
         expected_idx_one = np.array(
             [[0, 0, 1, 0],
              [0, 0, 0, 1]]
@@ -1130,8 +1127,7 @@ class TestBackends:
 
         # indices are: variable 1, parameter 2, 0 index of the list
         slice_idx_zero = out_view.tensor[1][2][0]
-        if not isinstance(slice_idx_zero, np.ndarray):
-            slice_idx_zero = slice_idx_zero.toarray()
+        slice_idx_zero = NumpyCanonBackend._to_dense(slice_idx_zero)
         expected_idx_zero = np.array(
             [[1, 0],
              [0, 0]]
@@ -1140,8 +1136,7 @@ class TestBackends:
 
         # indices are: variable 1, parameter 2, 1 index of the list
         slice_idx_one = out_view.tensor[1][2][1]
-        if not isinstance(slice_idx_one, np.ndarray):
-            slice_idx_one = slice_idx_one.toarray()
+        slice_idx_one = NumpyCanonBackend._to_dense(slice_idx_one)
         expected_idx_one = np.array(
             [[0, 0],
              [0, 1]]
@@ -1394,3 +1389,111 @@ class TestBackends:
 
         # Note: view is edited in-place:
         assert out_view.get_tensor_representation(0) == view.get_tensor_representation(0)
+
+    def test_tensor_view_combine_potentially_none(self, arg_view):
+        view = arg_view()
+        assert view.combine_potentially_none(None, None) is None
+        a = {"a": [1]}
+        b = {"b": [2]}
+        assert view.combine_potentially_none(a, None) == a
+        assert view.combine_potentially_none(None, a) == a
+        assert view.combine_potentially_none(a, b) == view.add_dicts(a, b)
+
+
+class TestScipyBackend(TestBackends):
+    def test_get_variable_tensor(self, scipy_backend):
+        outer = scipy_backend.get_variable_tensor((2,), 1)
+        assert outer.keys() == {1}, "Should only be in variable with ID 1"
+        inner = outer[1]
+        assert inner.keys() == {-1}, "Should only be in parameter slice -1, i.e. non parametrized."
+        tensor = inner[-1]
+        assert isinstance(tensor, list), "Should be list of tensors"
+        assert len(tensor) == 1, "Should be a single slice"
+        assert (tensor[0] != sp.eye(2, format='csr')).nnz == 0, "Should be eye(2)"
+
+    @pytest.mark.parametrize('data', [np.array([[1, 2], [3, 4]]), sp.eye(2) * 4])
+    def test_get_data_tensor(self, scipy_backend, data):
+        outer = scipy_backend.get_data_tensor(data)
+        assert outer.keys() == {-1}, "Should only be constant variable ID."
+        inner = outer[-1]
+        assert inner.keys() == {-1}, "Should only be in parameter slice -1, i.e. non parametrized."
+        tensor = inner[-1]
+        assert isinstance(tensor, list), "Should be tensor as list"
+        assert len(tensor) == 1, "Should be a single slice"
+        expected = sp.csr_matrix(data.reshape((-1, 1), order="F"))
+        assert (tensor[0] != expected).nnz == 0
+
+    def test_get_param_tensor(self, scipy_backend):
+        shape = (2, 2)
+        size = np.prod(shape)
+        outer = scipy_backend.get_param_tensor(shape, 3)
+        assert outer.keys() == {-1}, "Should only be constant variable ID."
+        inner = outer[-1]
+        assert inner.keys() == {3}, "Should only be the parameter slice of parameter with id 3."
+        tensor = inner[3]
+        assert isinstance(tensor, list), "Should be tensor as list"
+        assert len(tensor) == size, "Should be a slice for each element of the parameter"
+        assert (sp.hstack(tensor) != sp.eye(size, format='csr')).nnz == 0, \
+            'Should be eye(4) along axes 1 and 2'
+
+    def test_tensor_view_add_dicts(self, scipy_arg_view):
+        view = scipy_arg_view()
+        assert view.add_dicts({}, {}) == {}
+        assert view.add_dicts({"a": [1]}, {"a": [2]}) == {"a": [3]}
+        assert view.add_dicts({"a": [1]}, {"b": [2]}) == {"a": [1], "b": [2]}
+        assert view.add_dicts({"a": {"c": [1]}}, {"a": {"c": [1]}}) == {'a': {'c': [2]}}
+        with pytest.raises(ValueError, match="Values must either be dicts or <class 'list'>"):
+            view.add_dicts({"a": 1}, {"a": 2})
+
+
+class TestNumpyBackend(TestBackends):
+    def test_get_variable_tensor(self, numpy_backend):
+        outer = numpy_backend.get_variable_tensor((2,), 1)
+        assert outer.keys() == {1}, "Should only be in variable with ID 1"
+        inner = outer[1]
+        assert inner.keys() == {-1}, "Should only be in parameter slice -1, i.e. non parametrized."
+        tensor = inner[-1]
+        assert isinstance(tensor, np.ndarray), "Should be a numpy array"
+        assert tensor.shape == (1, 2, 2), "Should be a 1x2x2 tensor"
+        assert np.all(tensor[0] == np.eye(2)), "Should be eye(2)"
+
+    @pytest.mark.parametrize('data',
+                             [np.array([[1, 2], [3, 4]]), sp.eye(2) * 4, sp.csc_array((4, 1))])
+    def test_get_data_tensor(self, numpy_backend, data):
+        outer = numpy_backend.get_data_tensor(data)
+        assert outer.keys() == {-1}, "Should only be constant variable ID."
+        inner = outer[-1]
+        assert inner.keys() == {-1}, "Should only be in parameter slice -1, i.e. non parametrized."
+        tensor = inner[-1]
+        assert isinstance(tensor, np.ndarray), "Should be a numpy array"
+        assert isinstance(tensor[0], np.ndarray), "Inner matrix should also be a numpy array"
+        assert tensor.shape == (1, 4, 1), "Should be a 1x2x2 tensor"
+        expected = numpy_backend._to_dense(data).reshape((-1, 1), order="F")
+        assert np.all(tensor[0] == expected)
+
+    def test_get_param_tensor(self, numpy_backend):
+        shape = (2, 2)
+        size = np.prod(shape)
+        outer = numpy_backend.get_param_tensor(shape, 3)
+        assert outer.keys() == {-1}, "Should only be constant variable ID."
+        inner = outer[-1]
+        assert inner.keys() == {3}, "Should only be the parameter slice of parameter with id 3."
+        tensor = inner[3]
+        assert isinstance(tensor, np.ndarray), "Should be a numpy array"
+        assert tensor.shape == (4, 4, 1), "Should be a 4x4x1 tensor"
+        assert np.all(tensor[:, :, 0] == np.eye(size)), 'Should be eye(4) along axes 1 and 2'
+
+    def test_tensor_view_add_dicts(self, numpy_arg_view):
+        view = numpy_arg_view()
+
+        one = np.array([1])
+        two = np.array([2])
+        three = np.array([3])
+
+        assert view.add_dicts({}, {}) == {}
+        assert view.add_dicts({"a": one}, {"a": two}) == {"a": three}
+        assert view.add_dicts({"a": one}, {"b": two}) == {"a": one, "b": two}
+        assert view.add_dicts({"a": {"c": one}}, {"a": {"c": one}}) == {'a': {'c': two}}
+        with pytest.raises(ValueError,
+                           match="Values must either be dicts or <class 'numpy.ndarray'>"):
+            view.add_dicts({"a": 1}, {"a": 2})
