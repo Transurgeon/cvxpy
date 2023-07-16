@@ -326,7 +326,7 @@ class PythonCanonBackend(CanonBackend):
         Given (A, b) in view, return (-A, -b).
         """
 
-        def func(x, _p=1):
+        def func(x):
             return -x
 
         view.apply_all(func)
@@ -1118,15 +1118,8 @@ class StackedSlicesBackend(PythonCanonBackend):
     @staticmethod
     def promote(lin: LinOp, view: StackedSlicesTensorView) -> StackedSlicesTensorView:
         num_entries = int(np.prod(lin.shape))
-
-        def func(x, p):
-            if p == 1:
-                return x[np.zeros(num_entries, dtype=int), :]
-            else:
-                n = x.shape[1]
-                return x[np.zeros(num_entries, dtype=int), :]
-
-        view.apply_all(func)
+        rows = np.zeros(num_entries)
+        view.select_rows(rows)
         return view
 
     def mul_elem(self, lin: LinOp, view: StackedSlicesTensorView) -> StackedSlicesTensorView:
@@ -1138,8 +1131,8 @@ class StackedSlicesBackend(PythonCanonBackend):
             if p == 1:
                 return sp.csr_matrix(x.sum(axis=0))
             else:
-                n = x.shape[1]
-                ones = sp.csr_matrix((np.ones(n), (np.zeros(n), np.arange(n))), shape=(1, n))
+                m = x.shape[0] // p
+                ones = sp.csr_matrix((np.ones(m), (np.zeros(m), np.arange(m))), shape=(1, m))
                 return (sp.kron(sp.eye(p, format="csr"), ones) @ x).tocsr()
 
         view.apply_all(func)
@@ -1217,7 +1210,7 @@ class StackedSlicesBackend(PythonCanonBackend):
         param_size = self.param_to_size[parameter_id]
         shape = (int(np.prod(shape) * param_size), 1)
         arg = np.ones(param_size), (np.arange(param_size) + np.arange(param_size) * param_size, np.zeros(param_size))
-        param_vec = sp.coo_matrix(arg, shape)
+        param_vec = sp.csr_matrix(arg, shape)
         return {Constant.ID.value: {parameter_id: param_vec}}
 
 
@@ -1544,8 +1537,8 @@ class StackedSlicesTensorView(DictTensorView):
             if p == 1:
                 return x[rows, :]
             else:
-                m = x.shape[0]
-                return x[np.tile(rows, p) + np.tile(np.arange(p) * m, p), :]
+                m = x.shape[0] // p
+                return x[np.tile(rows, p) + np.repeat(np.arange(p) * m, p), :]
 
         self.apply_all(func)
 

@@ -95,29 +95,30 @@ class TestBackends:
         return NumpyCanonBackend(self.id_to_col, self.param_to_size, self.param_to_col,
                                  self.param_size_plus_one, self.var_length)
 
-    @pytest.fixture()
+    @pytest.fixture
     def stacked_slices_backend(self):
         return StackedSlicesBackend(self.id_to_col, self.param_to_size, self.param_to_col,
                                     self.param_size_plus_one, self.var_length)
 
-    @pytest.fixture()
+    @pytest.fixture
     def backend(self, setup, request):
         return request.getfixturevalue(setup['backend'])
 
-    @pytest.fixture()
-    def numpy_arg_view(self):
+    @classmethod
+    @pytest.fixture
+    def numpy_arg_view(cls):
         def numpy_view(param_size_plus_one=None, id_to_col=None,
                        param_to_size=None, param_to_col=None,
                        var_length=None):
-            return NumpyTensorView.get_empty_view(param_size_plus_one or self.param_size_plus_one,
-                                                  id_to_col or self.id_to_col,
-                                                  param_to_size or self.param_to_size,
-                                                  param_to_col or self.param_to_col,
-                                                  var_length or self.var_length)
+            return NumpyTensorView.get_empty_view(param_size_plus_one or cls.param_size_plus_one,
+                                                  id_to_col or cls.id_to_col,
+                                                  param_to_size or cls.param_to_size,
+                                                  param_to_col or cls.param_to_col,
+                                                  var_length or cls.var_length)
 
         return numpy_view
 
-    @pytest.fixture()
+    @pytest.fixture
     def scipy_arg_view(self):
         def scipy_view(param_size_plus_one=None, id_to_col=None,
                        param_to_size=None, param_to_col=None,
@@ -130,7 +131,7 @@ class TestBackends:
 
         return scipy_view
 
-    @pytest.fixture()
+    @pytest.fixture
     def stacked_slices_arg_view(self):
         def stacked_slices_view(param_size_plus_one=None, id_to_col=None,
                                 param_to_size=None, param_to_col=None,
@@ -143,7 +144,7 @@ class TestBackends:
 
         return stacked_slices_view
 
-    @pytest.fixture()
+    @pytest.fixture
     def arg_view(self, setup, request):
         return request.getfixturevalue(setup['arg_view'])
 
@@ -608,7 +609,7 @@ class TestBackends:
         # Note: view is edited in-place:
         assert out_view.get_tensor_representation(0) == view.get_tensor_representation(0)
 
-    def test_parametrized_sum_entries_(self, backend, arg_view):
+    def test_parametrized_sum_entries(self, backend, arg_view):
         """
         starting with a parametrized expression
         x1  x2
@@ -706,6 +707,46 @@ class TestBackends:
 
         # Note: view is edited in-place:
         assert out_view.get_tensor_representation(0) == view.get_tensor_representation(0)
+
+    def test_parametrized_promote(self, backend, arg_view):
+        """
+        define expr as
+         x1
+        [[[1]],
+
+        [[1]]]
+
+        promote(x) means we repeat the row to match the required dimensionality of n rows.
+
+        Thus, when using the same columns as before and assuming n = 2, we now have
+
+         x1
+        [[[1],
+        [1]],
+
+        [[1],
+        [1]]]
+        """
+        param_size_plus_one = 3
+        id_to_col = {-1: 0}
+        param_to_size = {3: 2}
+        param_to_col = {3: 0}
+        var_length = 0
+
+        param_lin_op = linOpHelper((2,), type='param', data=3)
+        empty_view = arg_view(param_size_plus_one, id_to_col,
+                              param_to_size, param_to_col,
+                              var_length)
+        backend.param_to_size = {-1: 1, 3: 2}
+        param_view = backend.process_constraint(param_lin_op, empty_view)
+
+        sum_entries_lin_op = linOpHelper()
+        summed_view = backend.sum_entries(sum_entries_lin_op, param_view)
+        promote_lin_op = linOpHelper(shape=(2,))
+        promote_view = backend.promote(promote_lin_op, summed_view)
+
+        tensor_repr = promote_view.get_tensor_representation(0)
+        A = 1
 
     def test_hstack(self, backend, arg_view):
         """
