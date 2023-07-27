@@ -22,6 +22,7 @@ from typing import Any, Callable
 
 import numpy as np
 import scipy.sparse as sp
+import sparse
 from scipy.signal import convolve
 
 from cvxpy.lin_ops import LinOp
@@ -863,20 +864,21 @@ class NumpyCanonBackend(PythonCanonBackend):
         lhs, is_param_free_lhs = self.get_constant_data(lin.data, view, column=False)
         if isinstance(lhs, dict):
             reps = view.rows // next(iter(lhs.values()))[0].shape[-1]
-            stacked_lhs = {k: np.kron(np.eye(reps), v) for k, v in lhs.items()}
+            stacked_lhs = {k: sparse.kron(sparse.eye(reps), v) for k, v in lhs.items()}
 
             def parametrized_mul(x):
                 assert len(x) == 1
-                return {k: v @ x for k, v in stacked_lhs.items()}
+                return {k: sparse.matmul(v, x) for k, v in stacked_lhs.items()}
 
             func = parametrized_mul
         else:
-            assert isinstance(lhs, np.ndarray)
+            lhs = self._to_sparse(lhs)
+            assert isinstance(lhs, sparse.COO)
             reps = view.rows // lhs.shape[-1]
-            stacked_lhs = np.kron(np.eye(reps), lhs)
+            stacked_lhs = sparse.kron(sparse.eye(reps), lhs)
 
             def func(x):
-                return stacked_lhs @ x
+                return sparse.matmul(stacked_lhs, x)
 
         return view.accumulate_over_variables(func, is_param_free_function=is_param_free_lhs)
 
@@ -1083,7 +1085,6 @@ class NumpyCanonBackend(PythonCanonBackend):
 
     def get_data_tensor(self, data: np.ndarray) -> \
             dict[int, dict[int, np.ndarray]]:
-        data = self._to_dense(data)
         tensor = data.reshape((-1, 1), order="F")
         return {Constant.ID.value: {Constant.ID.value: np.expand_dims(tensor, axis=0)}}
 
@@ -1100,6 +1101,11 @@ class NumpyCanonBackend(PythonCanonBackend):
         except AttributeError:
             res = x
         res = np.atleast_2d(res)
+        return res
+
+    @staticmethod
+    def _to_sparse(x):
+        res = sparse.COO.from_numpy(x)
         return res
 
 
