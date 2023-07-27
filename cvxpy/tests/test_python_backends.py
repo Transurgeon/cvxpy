@@ -11,11 +11,9 @@ import cvxpy.settings as s
 from cvxpy.lin_ops.canon_backend import (
     CanonBackend,
     NumpyCanonBackend,
-    NumpyTensorView,
-    ScipyCanonBackend,
-    ScipyTensorView,
-    TensorRepresentation,
     PythonCanonBackend,
+    ScipyCanonBackend,
+    TensorRepresentation,
 )
 
 
@@ -1040,6 +1038,59 @@ class TestParametrizedBackends:
         assert isinstance(backend, PythonCanonBackend)
         return backend
 
+    def test_parametrized_diag_vec(self, param_backend):
+        """
+        starting with a parametrized expression
+        x1  x2
+        [[[1  0],
+         [0  0]],
+
+         [[0  0],
+         [0  1]]]
+
+        diag_vec(x) means we introduce zero rows as if the vector was the diagonal
+        of an n x n matrix, with n the length of x.
+
+        Thus, when using the same columns as before, we now have
+
+        x1  x2
+        [[[1  0],
+         [0  0],
+         [0  0],
+         [0  0]],
+
+         [[0  0],
+         [0  0],
+         [0  0],
+         [0  1]]]
+        """
+        param_lin_op = linOpHelper((2,), type='param', data=2)
+        param_backend.param_to_col = {2: 0, -1: 3}
+        variable_lin_op = linOpHelper((2,), type='variable', data=1)
+        var_view = param_backend.process_constraint(variable_lin_op, param_backend.get_empty_view())
+        mul_elem_lin_op = linOpHelper(data=param_lin_op)
+        param_var_view = param_backend.mul_elem(mul_elem_lin_op, var_view)
+
+        sum_entries_lin_op = linOpHelper()
+        out_view = param_backend.sum_entries(sum_entries_lin_op, param_var_view)
+
+        slice_idx_zero = out_view.tensor[1][2][0]
+        slice_idx_zero = NumpyCanonBackend._to_dense(slice_idx_zero)
+        expected_idx_zero = np.array(
+            [[1., 0.]]
+        )
+        assert np.all(slice_idx_zero == expected_idx_zero)
+
+        slice_idx_one = out_view.tensor[1][2][1]
+        slice_idx_one = NumpyCanonBackend._to_dense(slice_idx_one)
+        expected_idx_one = np.array(
+            [[0., 1.]]
+        )
+        assert np.all(slice_idx_one == expected_idx_one)
+
+        # Note: view is edited in-place:
+        assert out_view.get_tensor_representation(0) == param_var_view.get_tensor_representation(0)
+
     def test_parametrized_sum_entries(self, param_backend):
         """
         starting with a parametrized expression
@@ -1085,6 +1136,51 @@ class TestParametrizedBackends:
 
         # Note: view is edited in-place:
         assert out_view.get_tensor_representation(0) == param_var_view.get_tensor_representation(0)
+
+    def test_parametrized_promote(self, param_backend):
+        """
+        define expr as
+         x1
+        [[[1]],
+
+        [[1]]]
+
+        promote(x) means we repeat the row to match the required dimensionality of n rows.
+
+        Thus, when using the same columns as before and assuming n = 2, we now have
+
+         x1
+        [[[1],
+        [1]],
+
+        [[1],
+        [1]]]
+        """
+        param_lin_op = linOpHelper((2,), type='param', data=3)
+        param_backend.id_to_col = {-1: 0}
+        param_backend.param_to_size = {-1: 1, 3: 2}
+        param_backend.param_to_col = {3: 0}
+        param_backend.var_length = 0
+        param_view = param_backend.process_constraint(param_lin_op, param_backend.get_empty_view())
+
+        sum_entries_lin_op = linOpHelper()
+        summed_view = param_backend.sum_entries(sum_entries_lin_op, param_view)
+        promote_lin_op = linOpHelper(shape=(2,))
+        out_view = param_backend.promote(promote_lin_op, summed_view)
+
+        slice_idx_zero = out_view.tensor[-1][3][0]
+        slice_idx_zero = NumpyCanonBackend._to_dense(slice_idx_zero)
+        expected_idx_zero = np.array(
+            [[1.], [1.]]
+        )
+        assert np.all(slice_idx_zero == expected_idx_zero)
+
+        slice_idx_one = out_view.tensor[-1][3][1]
+        slice_idx_one = NumpyCanonBackend._to_dense(slice_idx_one)
+        expected_idx_one = np.array(
+            [[1.], [1.]]
+        )
+        assert np.all(slice_idx_one == expected_idx_one)
 
     def test_parametrized_mul(self, param_backend):
         """
@@ -1298,6 +1394,69 @@ class TestParametrizedBackends:
 
         # Note: view is edited in-place:
         assert out_view.get_tensor_representation(0) == view.get_tensor_representation(0)
+
+    def test_parametrized_div(self, param_backend):
+        """
+        Continuing the previous example when 'a' is a parameter, instead of multiplying with known
+        values, the matrix is split up into two slices, each representing an element of the
+        parameter, i.e. instead of
+         x1  x2
+        [[2  0],
+         [0  3]]
+
+         we obtain the list of length two:
+
+          x1  x2
+        [
+         [[1  0],
+          [0  0]],
+
+         [[0  0],
+          [0  1]]
+        ]
+        """
+
+    def test_parametrized_trace(self, param_backend):
+        """
+        Continuing the previous example when 'a' is a parameter, instead of multiplying with known
+        values, the matrix is split up into two slices, each representing an element of the
+        parameter, i.e. instead of
+         x1  x2
+        [[2  0],
+         [0  3]]
+
+         we obtain the list of length two:
+
+          x1  x2
+        [
+         [[1  0],
+          [0  0]],
+
+         [[0  0],
+          [0  1]]
+        ]
+        """
+
+    def test_parametrized_conv(self, param_backend):
+        """
+        Continuing the previous example when 'a' is a parameter, instead of multiplying with known
+        values, the matrix is split up into two slices, each representing an element of the
+        parameter, i.e. instead of
+         x1  x2
+        [[2  0],
+         [0  3]]
+
+         we obtain the list of length two:
+
+          x1  x2
+        [
+         [[1  0],
+          [0  0]],
+
+         [[0  0],
+          [0  1]]
+        ]
+        """
 
 
 class TestScipyBackend:
