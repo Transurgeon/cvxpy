@@ -6,16 +6,15 @@ from typing import Callable
 import numpy as np
 import pytest
 import scipy.sparse as sp
+import sparse
 
 import cvxpy.settings as s
 from cvxpy.lin_ops.canon_backend import (
     CanonBackend,
     NumpyCanonBackend,
-    NumpyTensorView,
-    ScipyCanonBackend,
-    ScipyTensorView,
-    TensorRepresentation,
     PythonCanonBackend,
+    ScipyCanonBackend,
+    TensorRepresentation,
 )
 
 
@@ -665,7 +664,8 @@ class TestBackends:
 
         # cast to numpy
         view_A = view.get_tensor_representation(0)
-        view_A = sp.coo_matrix((view_A.data, (view_A.row, view_A.col)), shape=(4, 4)).toarray()
+        view_A = sparse.COO((view_A.row.astype(int), view_A.col.astype(int)),
+                            view_A.data, shape=(4, 4)).todense()
         assert np.all(view_A == np.eye(4))
 
         lhs = linOpHelper((2, 2), type='dense_const', data=np.array([[1, 2], [3, 4]]))
@@ -1132,7 +1132,8 @@ class TestParametrizedBackends:
 
         # cast to numpy
         view_A = view.get_tensor_representation(0)
-        view_A = sp.coo_matrix((view_A.data, (view_A.row, view_A.col)), shape=(4, 4)).toarray()
+        view_A = sparse.COO((view_A.row.astype(int), view_A.col.astype(int)),
+                            view_A.data, shape=(4, 4)).todense()
         assert np.all(view_A == np.eye(4))
 
         lhs_parameter = linOpHelper((2, 2), type='param', data=2)

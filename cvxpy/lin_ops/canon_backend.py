@@ -842,7 +842,7 @@ class NumpyCanonBackend(PythonCanonBackend):
     def reshape_constant_data(constant_data: dict[int, np.ndarray],
                               lin_op_shape: tuple[int, int]) \
             -> dict[int, np.ndarray]:
-        return {k: v.reshape((v.shape[0], *lin_op_shape), order="F")
+        return {k: v.reshape((v.shape[0], *lin_op_shape))
                 for k, v in constant_data.items()}
 
     def concatenate_tensors(self, tensors: list[TensorRepresentation]) \
@@ -1078,21 +1078,23 @@ class NumpyCanonBackend(PythonCanonBackend):
         return view.accumulate_over_variables(func, is_param_free_function=is_param_free_rhs)
 
     def get_variable_tensor(self, shape: tuple[int, ...], variable_id: int) \
-            -> dict[int, dict[int, np.ndarray]]:
+            -> dict[int, dict[int, sparse.COO]]:
         assert variable_id != Constant.ID
         n = int(np.prod(shape))
-        return {variable_id: {Constant.ID.value: np.expand_dims(np.eye(n), axis=0)}}
+        return {variable_id: {Constant.ID.value: sparse.eye(n).reshape((1, n, n))}}
 
-    def get_data_tensor(self, data: np.ndarray) -> \
-            dict[int, dict[int, np.ndarray]]:
-        tensor = data.reshape((-1, 1), order="F")
-        return {Constant.ID.value: {Constant.ID.value: np.expand_dims(tensor, axis=0)}}
+    def get_data_tensor(self, data: sparse.COO) -> \
+            dict[int, dict[int, sparse.COO]]:
+        # order is currently not supported in the sparse library
+        tensor = data.reshape((-1, 1))
+        tensor = tensor.reshape((1, tensor.shape[0], tensor.shape[1]))
+        return {Constant.ID.value: {Constant.ID.value: tensor}}
 
     def get_param_tensor(self, shape: tuple[int, ...], parameter_id: int) \
-            -> dict[int, dict[int, np.ndarray]]:
+            -> dict[int, dict[int, sparse.COO]]:
         assert parameter_id != Constant.ID
         n = int(np.prod(shape))
-        return {Constant.ID.value: {parameter_id: np.expand_dims(np.eye(n), axis=-1)}}
+        return {Constant.ID.value: {parameter_id: sparse.eye(n).reshape((n, n, 1))}}
 
     @staticmethod
     def _to_dense(x):
@@ -1100,6 +1102,8 @@ class NumpyCanonBackend(PythonCanonBackend):
             res = x.A
         except AttributeError:
             res = x
+        if isinstance(x, sparse.COO):
+            return x.todense()
         res = np.atleast_2d(res)
         return res
 
@@ -1364,7 +1368,7 @@ class NumpyTensorView(DictTensorView):
             for parameter_id, parameter_tensor in variable_tensor.items():
                 param_size, rows, cols = parameter_tensor.shape
                 tensor_representations.append(TensorRepresentation(
-                    parameter_tensor.flatten(order='F'),
+                    parameter_tensor.flatten().todense(),
                     np.repeat(np.tile(np.arange(rows), cols), param_size) + row_offset,
                     np.repeat(np.repeat(np.arange(cols), rows), param_size)
                     + self.id_to_col[variable_id],
