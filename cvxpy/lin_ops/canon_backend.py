@@ -25,8 +25,12 @@ import scipy.sparse as sp
 from scipy.signal import convolve
 
 from cvxpy.lin_ops import LinOp
-from cvxpy.settings import RUST_CANON_BACKEND, SCIPY_CANON_BACKEND, \
-    NUMPY_CANON_BACKEND, STACKED_SLICES_CANON_BACKEND
+from cvxpy.settings import (
+    NUMPY_CANON_BACKEND,
+    RUST_CANON_BACKEND,
+    SCIPY_CANON_BACKEND,
+    STACKED_SLICES_CANON_BACKEND,
+)
 
 
 class Constant(Enum):
@@ -1217,7 +1221,8 @@ class StackedSlicesBackend(PythonCanonBackend):
         assert parameter_id != Constant.ID
         param_size = self.param_to_size[parameter_id]
         shape = (int(np.prod(shape) * param_size), 1)
-        arg = np.ones(param_size), (np.arange(param_size) + np.arange(param_size) * param_size, np.zeros(param_size))
+        arg = np.ones(param_size), (np.arange(param_size) + np.arange(param_size) * param_size,
+                                    np.zeros(param_size))
         param_vec = sp.csr_matrix(arg, shape)
         return {Constant.ID.value: {parameter_id: param_vec}}
 
@@ -1567,8 +1572,9 @@ class StackedSlicesTensorView(DictTensorView):
 
     def create_new_tensor_view(self, variable_ids: set[int], tensor: Any,
                                is_parameter_free: bool) -> StackedSlicesTensorView:
-        return StackedSlicesTensorView(variable_ids, tensor, is_parameter_free, self.param_size_plus_one,
-                                       self.id_to_col, self.param_to_size, self.param_to_col,
+        return StackedSlicesTensorView(variable_ids, tensor, is_parameter_free,
+                                       self.param_size_plus_one,self.id_to_col,
+                                       self.param_to_size, self.param_to_col,
                                        self.var_length)
 
     @staticmethod
