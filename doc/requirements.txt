@@ -1,6 +1,6 @@
 sphinx
 cloud_sptheme
-alabaster
+sphinx-immaterial
 numpydoc
 scipy
 numpy
