@@ -89,6 +89,12 @@ Perform the following steps to install CVXPY from source:
 
         pip install .
 
+Using Codespaces
+----------------
+We provide support for `GitHub Codespaces <https://github.com/features/codespaces>`_ with
+preconfigured environments for CVXPY development via `devcontainers <https://containers.dev/>`_.
+To get started, click the "Code" button on the CVXPY repository and select "Open with Codespaces".
+
 Apple M1 users
 ~~~~~~~~~~~~~~
 Apple M1 users have had trouble installing CVXPY using the commands above.
@@ -241,6 +247,12 @@ CVXPY supports the CLARABEL solver.
 Simply install CLARABEL such that you can ``import clarabel`` in Python.
 See the `CLARABEL <https://oxfordcontrol.github.io/ClarabelDocs/stable/python/installation_py/>`_ website for installation instructions.
 
+Install with PIQP support
+-------------------------
+
+CVXPY supports the PIQP solver.
+Simply install PIQP such that you can ``import piqp`` in Python.
+See the `PIQP <https://predict-epfl.github.io/piqp/interfaces/python/installation>`_ website for installation instructions.
 
 Install with PROXQP support
 -----------------------------

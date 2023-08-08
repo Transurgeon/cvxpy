@@ -61,8 +61,10 @@ class TestExpressions(BaseTest):
         # self.assertEqual(x.canonical_form[0].shape, (2, 1))
         # self.assertEqual(x.canonical_form[1], [])
 
-        self.assertEqual(repr(self.x), "Variable((2,))")
-        self.assertEqual(repr(self.A), "Variable((2, 2))")
+        self.assertEqual(repr(self.x), "Variable((2,), x)")
+        self.assertEqual(repr(self.A), "Variable((2, 2), A)")
+        self.assertEqual(repr(cp.Variable(name='x', nonneg=True)), "Variable((), x, nonneg=True)")
+        self.assertTrue(repr(cp.Variable()).startswith("Variable((), var"))
 
         # Test shape provided as list instead of tuple
         self.assertEqual(cp.Variable(shape=[2], integer=True).shape, (2,))
@@ -1047,6 +1049,24 @@ class TestExpressions(BaseTest):
         exp = self.C[:, -199:-3]
         self.assertEqual(exp.shape, (3, 0))
 
+    def test_float_is_invalid_index(self) -> None:
+        with self.assertRaises(IndexError) as cm:
+            self.x[1.0]
+        self.assertEqual(str(cm.exception), "float is an invalid index type.")
+
+        with self.assertRaises(IndexError) as cm:
+            self.x[(1.0,)]
+        self.assertEqual(str(cm.exception), "float is an invalid index type.")
+
+        with self.assertRaises(IndexError) as cm:
+            self.C[: 2.:40]
+        self.assertEqual(str(cm.exception), "float is an invalid index type.")
+
+        with self.assertRaises(IndexError) as cm:
+            self.x[np.array([1.0, 2.0])]
+        self.assertEqual(str(cm.exception),
+                         "arrays used as indices must be of integer (or boolean) type")
+
     def test_neg_indices(self) -> None:
         """Test negative indices.
         """
@@ -1429,3 +1449,16 @@ class TestExpressions(BaseTest):
         M = Variable(shape=(2, 2))
         expr = x.T.__matmul__(M).__matmul__(x)
         assert not isinstance(expr, cp.QuadForm)
+
+    def test_matmul_scalars(self) -> None:
+        """Test evaluating a matmul that reduces one argument internally to a scalar.
+        """
+        x = cp.Variable((2,))
+        quad = cp.quad_form(x, np.eye(2))
+        a = np.array([2])
+        expr = quad * a
+        x.value = np.array([1, 2])
+        P = np.eye(2)
+        true_val = (np.transpose(x.value) @ P @ x.value) * a
+        assert quad.shape == ()
+        self.assertEqual(expr.value, true_val)

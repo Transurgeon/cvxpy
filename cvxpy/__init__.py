@@ -25,15 +25,14 @@ from cvxpy.error import (DCPError, DGPError, DPPError, SolverError,
 from cvxpy.expressions.constants import CallbackParam, Constant, Parameter
 from cvxpy.expressions.expression import Expression
 from cvxpy.expressions.variable import Variable
-from cvxpy.problems.objective import Maximize, Minimize
+from cvxpy.problems.objective import Maximize, Minimize, Objective
 from cvxpy.problems.problem import Problem
 from cvxpy.transforms import linearize, partial_optimize, suppfunc
-from cvxpy.reductions import *
 from cvxpy.reductions.solvers.defines import installed_solvers
 from cvxpy.settings import (CBC, CLARABEL, COPT, CPLEX, CPP_CANON_BACKEND,
                             CVXOPT, DIFFCP, ECOS, ECOS_BB, GLOP, GLPK, GLPK_MI,
                             GUROBI, INFEASIBLE, INFEASIBLE_INACCURATE, MOSEK,
-                            NAG, OPTIMAL, OPTIMAL_INACCURATE, OSQP, PDLP,
+                            NAG, OPTIMAL, OPTIMAL_INACCURATE, OSQP, PDLP, PIQP,
                             PROXQP, ROBUST_KKTSOLVER, RUST_CANON_BACKEND, SCIP,
                             SCIPY, SCIPY_CANON_BACKEND, SCS, SDPA,
                             SOLVER_ERROR, UNBOUNDED, UNBOUNDED_INACCURATE,

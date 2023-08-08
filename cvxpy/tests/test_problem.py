@@ -15,7 +15,6 @@ limitations under the License.
 """
 
 import builtins
-import copy
 import pickle
 import sys
 import warnings
@@ -25,8 +24,8 @@ from io import StringIO
 import ecos
 import numpy
 import numpy as np
-import pytest
 import scipy.sparse as sp
+
 # Solvers.
 import scs
 from numpy import linalg as LA
@@ -34,15 +33,17 @@ from numpy import linalg as LA
 import cvxpy as cp
 import cvxpy.interface as intf
 import cvxpy.settings as s
-from cvxpy.constraints import PSD, ExpCone, NonPos, Zero
+from cvxpy.constraints import PSD, ExpCone, NonNeg, Zero
 from cvxpy.error import DCPError, ParameterError, SolverError
 from cvxpy.expressions.constants import Constant, Parameter
 from cvxpy.expressions.variable import Variable
 from cvxpy.problems.problem import Problem
 from cvxpy.reductions.solvers.conic_solvers import ecos_conif, scs_conif
 from cvxpy.reductions.solvers.conic_solvers.conic_solver import ConicSolver
-from cvxpy.reductions.solvers.defines import (INSTALLED_SOLVERS,
-                                              SOLVER_MAP_CONIC,)
+from cvxpy.reductions.solvers.defines import (
+    INSTALLED_SOLVERS,
+    SOLVER_MAP_CONIC,
+)
 from cvxpy.tests.base_test import BaseTest
 
 
@@ -75,11 +76,11 @@ class TestProblem(BaseTest):
 
         # Test str.
         result = (
-            "minimize %(name)s\nsubject to %(name)s == 0\n           %(name)s <= 0" % {
+            "minimize %(name)s\nsubject to %(name)s == 0\n           %(name)s >= 0" % {
                 "name": self.a.name()
             }
         )
-        prob = Problem(cp.Minimize(self.a), [Zero(self.a), NonPos(self.a)])
+        prob = Problem(cp.Minimize(self.a), [Zero(self.a), NonNeg(self.a)])
         self.assertEqual(str(prob), result)
 
     def test_variables(self) -> None:
@@ -212,6 +213,7 @@ class TestProblem(BaseTest):
         # into setup, solve, and polish; these are summed to obtain solve_time)
         self.assertGreater(stats.num_iters, 0)
         self.assertTrue(hasattr(stats.extra_stats, 'info'))
+        self.assertTrue(str(stats).startswith("SolverStats(solver_name="))
 
     def test_compilation_time(self) -> None:
         prob = Problem(cp.Minimize(cp.norm(self.x)), [self.x == 0])
@@ -281,7 +283,7 @@ class TestProblem(BaseTest):
                 # Don't test GLPK because there's a race
                 # condition in setting CVXOPT solver options.
                 if solver in [cp.GLPK, cp.GLPK_MI, cp.MOSEK, cp.CBC,
-                              cp.SCIPY, cp.SDPA, cp.COPT]:
+                              cp.SCIPY, cp.COPT]:
                     continue
                 sys.stdout = StringIO()  # capture output
 
@@ -1430,6 +1432,32 @@ class TestProblem(BaseTest):
         result = prob.solve(solver=cp.SCS)
         self.assertAlmostEqual(result, 0.583151, places=2)
 
+    def test_diag_offset_problem(self) -> None:
+
+        # Constants
+        n = 4
+        A = np.arange(int(n**2)).reshape((n, n))
+
+        for k in range(-n + 1, n):
+            # diag_vec
+            x = cp.Variable(n - abs(k))
+            obj = cp.Minimize(cp.sum(x))
+            constraints = [cp.diag(x, k) == np.diag(np.diag(A, k), k)]
+            prob = cp.Problem(obj, constraints)
+            result = prob.solve(solver=cp.SCS, eps=1e-6)
+            self.assertAlmostEqual(result, np.sum(np.diag(A, k)))
+            assert np.allclose(x.value, np.diag(A, k), atol=1e-4)
+
+            # diag_mat
+            X = cp.Variable((n, n), nonneg=True)
+
+            obj = cp.Minimize(cp.sum(X))
+            constraints = [cp.diag(X, k) == np.diag(A, k)]
+            prob = cp.Problem(obj, constraints)
+            result = prob.solve(solver=cp.SCS, eps=1e-6)
+            self.assertAlmostEqual(result, np.sum(np.diag(A, k)))
+            assert np.allclose(X.value, np.diag(np.diag(A, k), k), atol=1e-4)
+
     def test_presolve_parameters(self) -> None:
         """Test presolve with parameters.
         """
@@ -2066,27 +2094,3 @@ class TestProblem(BaseTest):
             c = cp.sum(a)
             cp.Problem(cp.Maximize(0), [c >= 0])
             assert len(w) == 0
-
-    def test_copy_constraints(self) -> None:
-        """Test copy and deepcopy of constraints.
-        """
-        x = cp.Variable()
-        y = cp.Variable()
-
-        constraints = [
-            x + y == 1,
-            x - y >= 1
-        ]
-        constraints[0].atoms()
-        constraints = copy.copy(constraints)
-
-        obj = cp.Minimize((x - y) ** 2)
-        prob = cp.Problem(obj, constraints)
-        prob.solve()
-        assert prob.status == cp.OPTIMAL
-        assert np.allclose(x.value, 1)
-        assert np.allclose(y.value, 0)
-
-        error_msg = "Creating a deepcopy of a CVXPY expression is not supported"
-        with pytest.raises(NotImplementedError, match=error_msg):
-            copy.deepcopy(constraints)

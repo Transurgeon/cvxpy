@@ -17,14 +17,18 @@ limitations under the License.
 from cvxpy import problems
 from cvxpy import settings as s
 from cvxpy.atoms.affine.upper_tri import vec_to_upper_tri
-from cvxpy.constraints import (PSD, SOC, Equality, Inequality, NonNeg, NonPos,
-                               OpRelEntrConeQuad, Zero,)
+from cvxpy.constraints import (
+    PSD,
+    SOC,
+    Equality,
+    OpRelEntrConeQuad,
+    Zero,
+)
 from cvxpy.constraints.constraint import Constraint
 from cvxpy.expressions import cvxtypes
 from cvxpy.lin_ops import lin_utils as lu
 from cvxpy.reductions import InverseData, Solution
-from cvxpy.reductions.complex2real.canonicalizers import (
-    CANON_METHODS as elim_cplx_methods,)
+from cvxpy.reductions.complex2real.canonicalizers import CANON_METHODS as elim_cplx_methods
 from cvxpy.reductions.reduction import Reduction
 
 
@@ -116,11 +120,11 @@ class Complex2Real(Reduction):
                         imag_id = inverse_data.real2imag[cid]
                         dvars[cid] = 1j*solution.dual_vars[imag_id]
                     # All cases that follow are for complex-valued constraints:
-                    #   1. check inequality / equality constraints.
+                    #   1. check equality constraints.
                     #   2. check PSD constraints.
                     #   3. check if a constraint is known to lack a complex dual implementation
                     #   4. raise an error
-                    elif isinstance(cons, (Equality, Zero, Inequality, NonNeg, NonPos)):
+                    elif isinstance(cons, (Equality, Zero)):
                         imag_id = inverse_data.real2imag[cid]
                         if imag_id in solution.dual_vars:
                             dvars[cid] = solution.dual_vars[cid] + \
