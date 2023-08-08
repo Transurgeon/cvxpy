@@ -131,7 +131,7 @@ pygments_style = 'sphinx'
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 
-extensions.append("sphinx_immaterial")
+extensions += ["sphinx_immaterial"]
 html_theme = 'sphinx_immaterial'
 
 # material theme options (see theme.conf for more information)
