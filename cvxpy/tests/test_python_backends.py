@@ -53,7 +53,8 @@ class TestBackendInstance:
             CanonBackend.get_backend('notabackend')
 
 
-backends = [s.STACKED_SLICES_BACKEND, s.SCIPY_CANON_BACKEND, s.NUMPY_CANON_BACKEND]
+backends = [s.GRAPH_BLAS_BACKEND, s.STACKED_SLICES_BACKEND,
+            s.SCIPY_CANON_BACKEND, s.NUMPY_CANON_BACKEND]
 
 
 class TestBackends:

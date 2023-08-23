@@ -20,12 +20,14 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Callable
 
+import graphblas as gb
 import numpy as np
 import scipy.sparse as sp
 from scipy.signal import convolve
 
 from cvxpy.lin_ops import LinOp
 from cvxpy.settings import (
+    GRAPH_BLAS_BACKEND,
     NUMPY_CANON_BACKEND,
     RUST_CANON_BACKEND,
     SCIPY_CANON_BACKEND,
@@ -119,6 +121,7 @@ class CanonBackend(ABC):
             NUMPY_CANON_BACKEND: NumpyCanonBackend,
             SCIPY_CANON_BACKEND: ScipyCanonBackend,
             STACKED_SLICES_BACKEND: StackedSlicesBackend,
+            GRAPH_BLAS_BACKEND: GraphBlasBackend,
             RUST_CANON_BACKEND: RustCanonBackend
         }
         return backends[backend_name](*args, **kwargs)
@@ -1445,6 +1448,123 @@ class StackedSlicesBackend(PythonCanonBackend):
         return {Constant.ID.value: {parameter_id: param_vec}}
 
 
+class GraphBlasBackend(PythonCanonBackend):
+
+    @staticmethod
+    def reshape_constant_data(constant_data: Any, lin_op_shape: tuple[int, int]) -> Any:
+        pass
+
+    def get_empty_view(self) -> TensorView:
+        return GraphBlasTensorView.get_empty_view(self.param_size_plus_one, self.id_to_col,
+                                                  self.param_to_size, self.param_to_col,
+                                                  self.var_length)
+
+    def neg(self, lin: LinOp, view: GraphBlasTensorView) -> GraphBlasTensorView:
+        def func(x, _p):
+            return -x
+
+        view.apply_all(func)
+        return view
+
+    def mul(self, lin: LinOp, view: TensorView) -> TensorView:
+        pass
+
+    @staticmethod
+    def promote(lin: LinOp, view: GraphBlasTensorView) -> GraphBlasTensorView:
+        num_entries = int(np.prod(lin.shape))
+        rows = np.zeros(num_entries)
+        view.select_rows(rows)
+        return view
+
+    def mul_elem(self, lin: LinOp, view: GraphBlasTensorView) -> GraphBlasTensorView:
+        lhs, is_param_free_lhs = self.get_constant_data(lin.data, view, column=True)
+        if is_param_free_lhs:
+            def func(x, p):
+                if p == 1:
+                    return lhs.ewise_mult(x)
+                else:
+                    new_lhs = gb.ss.concat([[lhs]] * p)
+                    return new_lhs.ewise_mult(x)
+        else:
+            def parametrized_mul(x):
+                return {k: v.ewise_mult(gb.ss.concat([[x]] * self.param_to_size[k]))
+                        for k, v in lhs.items()}
+
+            func = parametrized_mul
+        return view.accumulate_over_variables(func, is_param_free_function=is_param_free_lhs)
+
+    @staticmethod
+    def sum_entries(_lin: LinOp, view: GraphBlasTensorView) -> GraphBlasTensorView:
+        def func(x, p):
+            if p == 1:
+                return x.reduce_columnwise("sum")._as_matrix().T
+            else:
+                m = x.shape[0] // p
+                eye = gb.Vector.from_scalar(1, p).diag()
+                return eye.kronecker(gb.Vector.from_scalar(1, m)._as_matrix().T, "times") @ x
+
+        view.apply_all(func)
+        return view
+
+    def div(self, lin: LinOp, view: TensorView) -> TensorView:
+        lhs, is_param_free_lhs = self.get_constant_data(lin.data, view, column=True)
+        assert is_param_free_lhs
+        lhs.dtype = float
+        lhs = gb.unary.minv(lhs)
+
+        def div_func(x, _p):
+            return lhs.ewise_mult(x)
+
+        return view.accumulate_over_variables(div_func, is_param_free_function=is_param_free_lhs)
+
+    @staticmethod
+    def diag_vec(lin: LinOp, view: TensorView) -> TensorView:
+        pass
+
+    @staticmethod
+    def get_stack_func(total_rows: int, offset: int) -> Callable:
+        pass
+
+    def rmul(self, lin: LinOp, view: TensorView) -> TensorView:
+        pass
+
+    @staticmethod
+    def trace(lin: LinOp, view: TensorView) -> TensorView:
+        pass
+
+    def conv(self, lin: LinOp, view: TensorView) -> TensorView:
+        pass
+
+    def kron_r(self, lin: LinOp, view: TensorView) -> TensorView:
+        pass
+
+    def kron_l(self, lin: LinOp, view: TensorView) -> TensorView:
+        pass
+
+    def get_variable_tensor(self, shape: tuple[int, ...], variable_id: int) -> \
+            dict[int, dict[int, gb.Matrix]]:
+        assert variable_id != Constant.ID
+        n = int(np.prod(shape))
+        eye = gb.Vector.from_scalar(1, n).diag()
+        return {variable_id: {Constant.ID.value: eye}}
+
+    def get_data_tensor(self, data: np.ndarray | sp.spmatrix) -> \
+            dict[int, dict[int, gb.Matrix]]:
+        tensor = data.flatten(order="F")
+        if isinstance(data, sp.spmatrix):
+            tensor = tensor.toarray()
+        return {Constant.ID.value: {Constant.ID.value: gb.Vector.from_dense(tensor,
+                                                                            dtype=int)}}
+
+    def get_param_tensor(self, shape: tuple[int, ...], parameter_id: int) -> \
+            dict[int, dict[int, gb.Matrix]]:
+        assert parameter_id != Constant.ID
+        p = self.param_to_size[parameter_id]
+        param_vec = gb.Vector.from_coo(indices=np.arange(p) + np.arange(p) * p,
+                                       size=int(np.prod(shape) * p))
+        return {Constant.ID.value: {parameter_id: param_vec}}
+
+
 class TensorView(ABC):
     """
     A TensorView represents the tensors for A and b, which are of shape
@@ -1818,3 +1938,65 @@ class StackedSlicesTensorView(DictTensorView):
         sparse matrix instead of smaller sparse matrices in a list.
         """
         return sp.spmatrix
+
+
+class GraphBlasTensorView(DictTensorView):
+    @property
+    def rows(self) -> int:
+        if self.tensor is not None:
+            for param_dict in self.tensor.values():
+                for param_id, param_mat in param_dict.items():
+                    return param_mat.shape[0] // self.param_to_size[param_id]
+        else:
+            raise ValueError('Tensor cannot be None')
+
+    def get_tensor_representation(self, row_offset: int) -> TensorRepresentation:
+        assert self.tensor is not None
+        tensor_representations = []
+        for variable_id, variable_tensor in self.tensor.items():
+            for parameter_id, parameter_matrix in variable_tensor.items():
+                p = self.param_to_size[parameter_id]
+                m = parameter_matrix.shape[0] // p
+                coo_repr = parameter_matrix.to_coo()
+                tensor_representations.append(TensorRepresentation(
+                    coo_repr[2],
+                    (coo_repr[0] % m) + row_offset,
+                    coo_repr[1] + self.id_to_col[variable_id],
+                    coo_repr[0] // m + np.ones(len(coo_repr[2])) * self.param_to_col[parameter_id],
+                ))
+        return TensorRepresentation.combine(tensor_representations)
+
+    def select_rows(self, rows: np.ndarray) -> None:
+        def func(x, p):
+            if p == 1:
+                return x[rows, :]
+            else:
+                m = x.shape[0] // p
+                return x[np.tile(rows, p) + np.repeat(np.arange(p) * m, len(rows)), :]
+
+        self.apply_all(func)
+
+    def apply_all(self, func: Callable) -> None:
+        self.tensor = {var_id: {k: func(v, self.param_to_size[k])
+                                for k, v in parameter_repr.items()}
+                       for var_id, parameter_repr in self.tensor.items()}
+
+    def create_new_tensor_view(self, variable_ids: set[int], tensor: Any,
+                               is_parameter_free: bool) -> GraphBlasTensorView:
+        return GraphBlasTensorView(variable_ids, tensor, is_parameter_free,
+                                   self.param_size_plus_one, self.id_to_col,
+                                   self.param_to_size, self.param_to_col,
+                                   self.var_length)
+
+    def apply_to_parameters(self, func: Callable,
+                            parameter_representation: dict[int, gb.Matrix]) \
+            -> dict[int, gb.Matrix]:
+        return {k: func(v, self.param_to_size[k]) for k, v in parameter_representation.items()}
+
+    @staticmethod
+    def add_tensors(a: gb.Matrix, b: gb.Matrix) -> gb.Matrix:
+        return a + b
+
+    @staticmethod
+    def tensor_type():
+        return gb.Matrix
