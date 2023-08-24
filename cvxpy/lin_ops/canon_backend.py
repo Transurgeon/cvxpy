@@ -34,6 +34,8 @@ from cvxpy.settings import (
     STACKED_SLICES_BACKEND,
 )
 
+gb.ss.config["format"] = "by_col"
+
 
 class Constant(Enum):
     ID = -1
@@ -1451,8 +1453,31 @@ class StackedSlicesBackend(PythonCanonBackend):
 class GraphBlasBackend(PythonCanonBackend):
 
     @staticmethod
-    def reshape_constant_data(constant_data: Any, lin_op_shape: tuple[int, int]) -> Any:
-        pass
+    def reshape_constant_data(constant_data: dict[int, gb.Matrix],
+                              lin_op_shape: tuple[int, int]) -> dict[int, gb.Matrix]:
+
+        return {k: GraphBlasBackend._reshape_single_constant_tensor(v, lin_op_shape)
+                for k, v in constant_data.items()}
+
+    @staticmethod
+    def _reshape_single_constant_tensor(v: gb.Matrix, lin_op_shape: tuple[int, int]) \
+            -> gb.Matrix:
+        v = v._as_matrix()
+        p = np.prod(v.shape) // np.prod(lin_op_shape)
+        old_shape = (v.nrows // p, v.ncols)
+
+        stacked_rows, cols, data = v.to_coo()
+        slice, rows = np.divmod(stacked_rows, old_shape[0])
+
+        element_position = cols * old_shape[0] + rows
+        new_cols, new_rows = np.divmod(element_position, lin_op_shape[0])
+        new_rows = slice * lin_op_shape[0] + new_rows
+
+        return gb.Matrix.from_coo(rows=new_rows,
+                                  columns=new_cols,
+                                  values=data,
+                                  nrows=p * lin_op_shape[0],
+                                  ncols=lin_op_shape[1])
 
     def get_empty_view(self) -> TensorView:
         return GraphBlasTensorView.get_empty_view(self.param_size_plus_one, self.id_to_col,
@@ -1467,7 +1492,34 @@ class GraphBlasBackend(PythonCanonBackend):
         return view
 
     def mul(self, lin: LinOp, view: GraphBlasTensorView) -> GraphBlasTensorView:
-        pass
+        lhs, is_param_free_lhs = self.get_constant_data(lin.data, view, column=False)
+        if is_param_free_lhs:
+            reps = view.rows // lhs.shape[-1]
+            if reps > 1:
+                eye = gb.Vector.from_scalar(1, reps).diag()
+                stacked_lhs = eye.kronecker(lhs)
+            else:
+                stacked_lhs = lhs
+
+            def func(x, p):
+                # TODO: add test for case p > 1 and reps > 1
+                if p == 1:
+                    return stacked_lhs @ x
+                else:
+                    eye = gb.Vector.from_scalar(1, p).diag()
+                    return eye.kronecker(stacked_lhs) @ x
+        else:
+            reps = view.rows // next(iter(lhs.values())).shape[-1]
+            if reps > 1:
+                stacked_lhs = self._repeat_parametrized_lhs(lhs, reps)
+            else:
+                stacked_lhs = lhs
+
+            def parametrized_mul(x):
+                return {k: v @ x for k, v in stacked_lhs.items()}
+
+            func = parametrized_mul
+        return view.accumulate_over_variables(func, is_param_free_function=is_param_free_lhs)
 
     @staticmethod
     def promote(lin: LinOp, view: GraphBlasTensorView) -> GraphBlasTensorView:
@@ -1553,10 +1605,59 @@ class GraphBlasBackend(PythonCanonBackend):
                                       values=coo_repr[2],
                                       nrows=int(total_rows * p),
                                       ncols=tensor.shape[1])
+
         return stack_func
 
     def rmul(self, lin: LinOp, view: GraphBlasTensorView) -> GraphBlasTensorView:
-        pass
+        lhs, is_param_free_lhs = self.get_constant_data(lin.data, view, column=False)
+
+        arg_cols = lin.args[0].shape[0] if len(lin.args[0].shape) == 1 else lin.args[0].shape[1]
+
+        if is_param_free_lhs:
+            if len(lin.data.shape) == 1 and arg_cols != lhs.shape[0]:
+                lhs = lhs.T
+            reps = view.rows // lhs.shape[0]
+            if reps > 1:
+                eye = gb.Vector.from_scalar(1, reps).diag()
+                stacked_lhs = lhs.T.kronecker(eye)
+            else:
+                stacked_lhs = lhs.T
+
+            def func(x, _p):
+                return stacked_lhs @ x
+        else:
+            lhs_shape = next(iter(lhs.values())).shape
+            p = view.rows // lhs_shape[-1]
+            lhs_shape = (lhs_shape[0] // p, lhs_shape[1])
+            if len(lin.data.shape) == 1 and arg_cols != lhs_shape[0]:
+                # Example: (n,n) @ (n,), we need to interpret the rhs as a column vector,
+                # but it is a row vector by default, so we need to transpose
+                lhs_shape = next(iter(lhs.values())).shape
+                lhs_shape = (lhs_shape[0], lhs_shape[1] // p)
+                for param_id, param_mat in lhs.items():
+                    inds = np.arange(param_mat.shape[1])
+                    sub_inds = np.split(inds, self.param_to_size[param_id])
+                    lhs[param_id] = sp.vstack([param_mat[s].T for s in sub_inds],
+                                              format='csc')
+
+            reps = view.rows // lhs_shape[0]
+            eye = sp.eye(reps, format="csc")
+            stacked_lhs = {}
+            for param_id, param_mat in lhs.items():
+                inds = np.arange(param_mat.shape[0])
+                sub_inds = np.split(inds, self.param_to_size[param_id])
+                if reps > 1:
+                    stacked_lhs[param_id] = sp.vstack([sp.kron(param_mat[s].T, eye, format='csc')
+                                                       for s in sub_inds], format='csc')
+                else:
+                    stacked_lhs[param_id] = sp.vstack([param_mat[s].T
+                                                       for s in sub_inds], format='csc')
+
+            def parametrized_mul(x):
+                return {k: (v @ x).tocsc() for k, v in stacked_lhs.items()}
+
+            func = parametrized_mul
+        return view.accumulate_over_variables(func, is_param_free_function=is_param_free_lhs)
 
     @staticmethod
     def trace(lin: LinOp, view: GraphBlasTensorView) -> GraphBlasTensorView:
@@ -1570,7 +1671,31 @@ class GraphBlasBackend(PythonCanonBackend):
         return view.accumulate_over_variables(func, is_param_free_function=True)
 
     def conv(self, lin: LinOp, view: GraphBlasTensorView) -> GraphBlasTensorView:
-        pass
+        lhs, is_param_free_lhs = self.get_constant_data(lin.data, view, column=False)
+        assert is_param_free_lhs
+        assert lhs.ndim == 2
+
+        if len(lin.data.shape) == 1:
+            lhs = lhs.T
+
+        rows = lin.shape[0]
+        cols = lin.args[0].shape[0]
+        non_zeros = lhs.shape[0]
+
+        lhs = lhs.to_coo()
+        row_idx = (np.tile(lhs[0], cols) + np.repeat(np.arange(cols), non_zeros)).astype(int)
+        col_idx = (np.tile(lhs[1], cols) + np.repeat(np.arange(cols), non_zeros)).astype(int)
+        data = np.tile(lhs[2], cols)
+        lhs = gb.Matrix.from_coo(rows=row_idx,
+                                 columns=col_idx,
+                                 values=data,
+                                 nrows=rows,
+                                 ncols=cols)
+
+        def func(x, _p):
+            return lhs @ x
+
+        return view.accumulate_over_variables(func, is_param_free_function=is_param_free_lhs)
 
     def kron_r(self, lin: LinOp, view: GraphBlasTensorView) -> GraphBlasTensorView:
         lhs, is_param_free_lhs = self.get_constant_data(lin.data, view, column=True)
