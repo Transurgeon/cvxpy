@@ -1466,13 +1466,13 @@ class GraphBlasBackend(PythonCanonBackend):
         view.apply_all(func)
         return view
 
-    def mul(self, lin: LinOp, view: TensorView) -> TensorView:
+    def mul(self, lin: LinOp, view: GraphBlasTensorView) -> GraphBlasTensorView:
         pass
 
     @staticmethod
     def promote(lin: LinOp, view: GraphBlasTensorView) -> GraphBlasTensorView:
         num_entries = int(np.prod(lin.shape))
-        rows = np.zeros(num_entries)
+        rows = np.zeros(num_entries).astype(int)
         view.select_rows(rows)
         return view
 
@@ -1506,7 +1506,7 @@ class GraphBlasBackend(PythonCanonBackend):
         view.apply_all(func)
         return view
 
-    def div(self, lin: LinOp, view: TensorView) -> TensorView:
+    def div(self, lin: LinOp, view: GraphBlasTensorView) -> GraphBlasTensorView:
         lhs, is_param_free_lhs = self.get_constant_data(lin.data, view, column=True)
         assert is_param_free_lhs
         lhs.dtype = float
@@ -1518,28 +1518,109 @@ class GraphBlasBackend(PythonCanonBackend):
         return view.accumulate_over_variables(div_func, is_param_free_function=is_param_free_lhs)
 
     @staticmethod
-    def diag_vec(lin: LinOp, view: TensorView) -> TensorView:
-        pass
+    def diag_vec(lin: LinOp, view: GraphBlasTensorView) -> GraphBlasTensorView:
+        assert lin.shape[0] == lin.shape[1]
+        k = lin.data
+        rows = lin.shape[0]
+        total_rows = int(lin.shape[0] ** 2)
+
+        def func(x, _p):
+            x = x.to_coo()
+            if k == 0:
+                new_rows = (x[0] * (rows + 1)).astype(int)
+            elif k > 0:
+                new_rows = (x[0] * (rows + 1) + rows * k).astype(int)
+            else:
+                new_rows = (x[0] * (rows + 1) - k).astype(int)
+            return gb.Matrix.from_coo(rows=new_rows,
+                                      columns=x[1],
+                                      values=x[2],
+                                      nrows=total_rows)
+
+        view.apply_all(func)
+        return view
 
     @staticmethod
     def get_stack_func(total_rows: int, offset: int) -> Callable:
-        pass
+        def stack_func(tensor, p):
+            coo_repr = tensor.to_coo()
+            m = tensor.shape[0] // p
+            slices = coo_repr[0] // m
+            new_rows = (coo_repr[0] + (slices + 1) * offset)
+            new_rows = new_rows + slices * (total_rows - m - offset).astype(int)
+            return gb.Matrix.from_coo(rows=new_rows,
+                                      columns=coo_repr[1],
+                                      values=coo_repr[2],
+                                      nrows=int(total_rows * p),
+                                      ncols=tensor.shape[1])
+        return stack_func
 
-    def rmul(self, lin: LinOp, view: TensorView) -> TensorView:
+    def rmul(self, lin: LinOp, view: GraphBlasTensorView) -> GraphBlasTensorView:
         pass
 
     @staticmethod
-    def trace(lin: LinOp, view: TensorView) -> TensorView:
+    def trace(lin: LinOp, view: GraphBlasTensorView) -> GraphBlasTensorView:
+        shape = lin.args[0].shape
+        indices = np.arange(shape[0]) * shape[0] + np.arange(shape[0])
+        lhs = gb.Vector.from_coo(indices, dtype=int)
+
+        def func(x, _p):
+            return (lhs @ x)._as_matrix().T
+
+        return view.accumulate_over_variables(func, is_param_free_function=True)
+
+    def conv(self, lin: LinOp, view: GraphBlasTensorView) -> GraphBlasTensorView:
         pass
 
-    def conv(self, lin: LinOp, view: TensorView) -> TensorView:
-        pass
+    def kron_r(self, lin: LinOp, view: GraphBlasTensorView) -> GraphBlasTensorView:
+        lhs, is_param_free_lhs = self.get_constant_data(lin.data, view, column=True)
+        assert is_param_free_lhs
 
-    def kron_r(self, lin: LinOp, view: TensorView) -> TensorView:
-        pass
+        assert len({arg.shape for arg in lin.args}) == 1
+        rhs_shape = lin.args[0].shape
 
-    def kron_l(self, lin: LinOp, view: TensorView) -> TensorView:
-        pass
+        lhs_ones = np.ones(lin.data.shape)
+        rhs_ones = np.ones(rhs_shape)
+
+        lhs_arange = np.arange(np.prod(lin.data.shape)).reshape(lin.data.shape, order="F")
+        rhs_arange = np.arange(np.prod(rhs_shape)).reshape(rhs_shape, order="F")
+
+        row_indices = (np.kron(lhs_ones, rhs_arange) +
+                       np.kron(lhs_arange, rhs_ones * np.prod(rhs_shape))) \
+            .flatten(order="F").astype(int)
+
+        def func(x, _p):
+            assert x.ndim == 2
+            kron_res = lhs._as_matrix().kronecker(x)
+            kron_res = kron_res[row_indices, :]
+            return kron_res
+
+        return view.accumulate_over_variables(func, is_param_free_function=is_param_free_lhs)
+
+    def kron_l(self, lin: LinOp, view: GraphBlasTensorView) -> GraphBlasTensorView:
+        rhs, is_param_free_rhs = self.get_constant_data(lin.data, view, column=True)
+        assert is_param_free_rhs
+
+        assert len({arg.shape for arg in lin.args}) == 1
+        lhs_shape = lin.args[0].shape
+
+        rhs_ones = np.ones(lin.data.shape)
+        lhs_ones = np.ones(lhs_shape)
+
+        rhs_arange = np.arange(np.prod(lin.data.shape)).reshape(lin.data.shape, order="F")
+        lhs_arange = np.arange(np.prod(lhs_shape)).reshape(lhs_shape, order="F")
+
+        row_indices = (np.kron(lhs_ones, rhs_arange) +
+                       np.kron(lhs_arange, rhs_ones * np.prod(lin.data.shape))) \
+            .flatten(order="F").astype(int)
+
+        def func(x, _p):
+            assert x.ndim == 2
+            kron_res = x.kronecker(rhs._as_matrix())
+            kron_res = kron_res[row_indices, :]
+            return kron_res
+
+        return view.accumulate_over_variables(func, is_param_free_function=is_param_free_rhs)
 
     def get_variable_tensor(self, shape: tuple[int, ...], variable_id: int) -> \
             dict[int, dict[int, gb.Matrix]]:
@@ -1549,7 +1630,7 @@ class GraphBlasBackend(PythonCanonBackend):
         return {variable_id: {Constant.ID.value: eye}}
 
     def get_data_tensor(self, data: np.ndarray | sp.spmatrix) -> \
-            dict[int, dict[int, gb.Matrix]]:
+            dict[int, dict[int, gb.Vector]]:
         tensor = data.flatten(order="F")
         if isinstance(data, sp.spmatrix):
             tensor = tensor.toarray()
@@ -1557,7 +1638,7 @@ class GraphBlasBackend(PythonCanonBackend):
                                                                             dtype=int)}}
 
     def get_param_tensor(self, shape: tuple[int, ...], parameter_id: int) -> \
-            dict[int, dict[int, gb.Matrix]]:
+            dict[int, dict[int, gb.Vector]]:
         assert parameter_id != Constant.ID
         p = self.param_to_size[parameter_id]
         param_vec = gb.Vector.from_coo(indices=np.arange(p) + np.arange(p) * p,
