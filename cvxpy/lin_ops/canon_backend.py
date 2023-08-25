@@ -1846,7 +1846,8 @@ class GraphBlasBackend(PythonCanonBackend):
     @staticmethod
     def _reshape_single_constant_tensor(v: gb.Matrix, lin_op_shape: tuple[int, int]) \
             -> gb.Matrix:
-        v = v._as_matrix()
+        if isinstance(v, gb.Vector):
+            v = v._as_matrix()
         p = np.prod(v.shape) // np.prod(lin_op_shape)
         old_shape = (v.nrows // p, v.ncols)
 
@@ -1997,15 +1998,14 @@ class GraphBlasBackend(PythonCanonBackend):
     @staticmethod
     def get_stack_func(total_rows: int, offset: int) -> Callable:
         def stack_func(tensor, p):
-            if isinstance(tensor, gb.Vector):
-                tensor = tensor._as_matrix()
+            tensor = GraphBlasTensorView.ensure_new_matrix(tensor)
             coo_repr = tensor.to_coo()
             m = tensor.shape[0] // p
             slices = coo_repr[0] // m
             new_rows = (coo_repr[0] + (slices + 1) * offset)
-            new_rows = new_rows + slices * (total_rows - m - offset).astype(int)
-            return gb.Matrix.from_coo(rows=new_rows,
-                                      columns=coo_repr[1],
+            new_rows = new_rows + slices * (total_rows - m - offset)
+            return gb.Matrix.from_coo(rows=new_rows.astype(int),
+                                      columns=coo_repr[1].astype(int),
                                       values=coo_repr[2],
                                       nrows=int(total_rows * p),
                                       ncols=tensor.shape[1])
@@ -2073,7 +2073,6 @@ class GraphBlasBackend(PythonCanonBackend):
     def conv(self, lin: LinOp, view: GraphBlasTensorView) -> GraphBlasTensorView:
         lhs, is_param_free_lhs = self.get_constant_data(lin.data, view, column=False)
         assert is_param_free_lhs
-        assert lhs.ndim == 2
 
         if len(lin.data.shape) == 1:
             lhs = lhs.T
@@ -2082,6 +2081,7 @@ class GraphBlasBackend(PythonCanonBackend):
         cols = lin.args[0].shape[0]
         non_zeros = lhs.shape[0]
 
+        lhs = GraphBlasTensorView.ensure_new_matrix(lhs)
         lhs = lhs.to_coo()
         row_idx = (np.tile(lhs[0], cols) + np.repeat(np.arange(cols), non_zeros)).astype(int)
         col_idx = (np.tile(lhs[1], cols) + np.repeat(np.arange(cols), non_zeros)).astype(int)
@@ -2343,10 +2343,14 @@ class DictTensorView(TensorView, ABC):
         for key in intersect:
             if isinstance(a[key], dict) and isinstance(b[key], dict):
                 res[key] = self.add_dicts(a[key], b[key])
+            else:
+                res[key] = self.add_tensors(a[key], b[key])
+            """
             elif isinstance(a[key], self.tensor_type()) and isinstance(b[key], self.tensor_type()):
                 res[key] = self.add_tensors(a[key], b[key])
             else:
                 raise ValueError(f'Values must either be dicts or {self.tensor_type()}.')
+            """
         for key in keys_a - intersect:
             res[key] = a[key]
         for key in keys_b - intersect:
@@ -2661,8 +2665,7 @@ class GraphBlasTensorView(DictTensorView):
             for parameter_id, parameter_matrix in variable_tensor.items():
                 p = self.param_to_size[parameter_id]
                 m = parameter_matrix.shape[0] // p
-                if isinstance(parameter_matrix, gb.Vector):
-                    parameter_matrix = parameter_matrix._as_matrix()
+                parameter_matrix = self.ensure_new_matrix(parameter_matrix)
                 coo_repr = parameter_matrix.to_coo()
                 tensor_representations.append(TensorRepresentation(
                     coo_repr[2],
@@ -2674,6 +2677,7 @@ class GraphBlasTensorView(DictTensorView):
 
     def select_rows(self, rows: np.ndarray) -> None:
         def func(x, p):
+            x = self.ensure_new_matrix(x)
             if p == 1:
                 return x[rows, :]
             else:
@@ -2697,12 +2701,24 @@ class GraphBlasTensorView(DictTensorView):
     def apply_to_parameters(self, func: Callable,
                             parameter_representation: dict[int, gb.Matrix]) \
             -> dict[int, gb.Matrix]:
-        return {k: func(v, self.param_to_size[k]) for k, v in parameter_representation.items()}
+        return {k: func(v, self.param_to_size[k])
+                for k, v in parameter_representation.items()}
+
+    @staticmethod
+    def ensure_new_matrix(tensor: Any):
+        if not isinstance(tensor, GraphBlasTensorView.tensor_type()):
+            tensor = tensor.new()
+        if isinstance(tensor, gb.Vector):
+            tensor = tensor._as_matrix()
+        return tensor
 
     @staticmethod
     def add_tensors(a: gb.Matrix, b: gb.Matrix) -> gb.Matrix:
-        return a + b
+        if isinstance(b, gb.Vector):
+            return b + a
+        else:
+            return a + b
 
     @staticmethod
     def tensor_type():
-        return gb.Matrix
+        return gb.Matrix, gb.Vector
