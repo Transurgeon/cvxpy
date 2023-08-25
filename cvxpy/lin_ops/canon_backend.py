@@ -1554,11 +1554,12 @@ class GraphBlasBackend(PythonCanonBackend):
                 if p == 1:
                     return lhs.ewise_mult(x)
                 else:
-                    new_lhs = gb.ss.concat([[lhs]] * p)
+                    new_lhs = GraphBlasTensorView.ensure_new_vector(gb.ss.concat([[lhs]] * p))
                     return new_lhs.ewise_mult(x)
         else:
             def parametrized_mul(x):
-                return {k: v.ewise_mult(gb.ss.concat([[x]] * self.param_to_size[k]))
+                return {k: GraphBlasTensorView.ensure_new_vector(v).ewise_mult
+                        (gb.ss.concat([[x]] * self.param_to_size[k]))
                         for k, v in lhs.items()}
 
             func = parametrized_mul
@@ -2231,6 +2232,14 @@ class GraphBlasTensorView(DictTensorView):
             tensor = tensor.new()
         if isinstance(tensor, gb.Vector):
             tensor = tensor._as_matrix()
+        return tensor
+
+    @staticmethod
+    def ensure_new_vector(tensor: Any):
+        if not isinstance(tensor, GraphBlasTensorView.tensor_type()):
+            tensor = tensor.new()
+        if isinstance(tensor, gb.Matrix):
+            tensor = tensor._as_vector()
         return tensor
 
     @staticmethod
