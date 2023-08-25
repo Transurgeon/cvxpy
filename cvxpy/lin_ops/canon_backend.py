@@ -1521,6 +1521,24 @@ class GraphBlasBackend(PythonCanonBackend):
             func = parametrized_mul
         return view.accumulate_over_variables(func, is_param_free_function=is_param_free_lhs)
 
+    def _repeat_parametrized_lhs(self, lhs: dict[int, list[gb.Matrix]], reps: int) \
+            -> gb.Matrix:
+        res = dict()
+        for param_id, v in lhs.items():
+            p = self.param_to_size[param_id]
+            old_shape = (v.shape[0] // p, v.shape[1])
+            rows, cols, data = v.to_coo()
+            new_rows = np.repeat(rows, reps) + np.tile(np.arange(reps) * old_shape[0], len(rows)) +\
+                       np.repeat(rows // old_shape[0], reps) * (old_shape[0] * (reps - 1))
+            new_cols = np.repeat(cols, reps) + np.tile(np.arange(reps) * old_shape[1], len(cols))
+            new_data = np.repeat(data, reps)
+            res[param_id] = gb.Matrix.from_coo(rows=new_rows.astype(int),
+                                               columns=new_cols.astype(int),
+                                               values=new_data,
+                                               nrows=v.shape[0] * reps,
+                                               ncols=v.shape[1] * reps)
+        return res
+
     @staticmethod
     def promote(lin: LinOp, view: GraphBlasTensorView) -> GraphBlasTensorView:
         num_entries = int(np.prod(lin.shape))
@@ -1595,6 +1613,8 @@ class GraphBlasBackend(PythonCanonBackend):
     @staticmethod
     def get_stack_func(total_rows: int, offset: int) -> Callable:
         def stack_func(tensor, p):
+            if isinstance(tensor, gb.Vector):
+                tensor = tensor._as_matrix()
             coo_repr = tensor.to_coo()
             m = tensor.shape[0] // p
             slices = coo_repr[0] // m
@@ -1637,24 +1657,20 @@ class GraphBlasBackend(PythonCanonBackend):
                 for param_id, param_mat in lhs.items():
                     inds = np.arange(param_mat.shape[1])
                     sub_inds = np.split(inds, self.param_to_size[param_id])
-                    lhs[param_id] = sp.vstack([param_mat[s].T for s in sub_inds],
-                                              format='csc')
+                    lhs[param_id] = gb.ss.concat([[param_mat[s, :].T for s in sub_inds]])
 
             reps = view.rows // lhs_shape[0]
-            eye = sp.eye(reps, format="csc")
+            eye = gb.Vector.from_scalar(1, reps).diag()
             stacked_lhs = {}
             for param_id, param_mat in lhs.items():
                 inds = np.arange(param_mat.shape[0])
                 sub_inds = np.split(inds, self.param_to_size[param_id])
                 if reps > 1:
-                    stacked_lhs[param_id] = sp.vstack([sp.kron(param_mat[s].T, eye, format='csc')
-                                                       for s in sub_inds], format='csc')
-                else:
-                    stacked_lhs[param_id] = sp.vstack([param_mat[s].T
-                                                       for s in sub_inds], format='csc')
+                    stacked_lhs[param_id] = gb.ss.concat([[param_mat[s, :].T.kronecker(eye)
+                                                           for s in sub_inds]])
 
             def parametrized_mul(x):
-                return {k: (v @ x).tocsc() for k, v in stacked_lhs.items()}
+                return {k: v @ x for k, v in stacked_lhs.items()}
 
             func = parametrized_mul
         return view.accumulate_over_variables(func, is_param_free_function=is_param_free_lhs)
@@ -1756,11 +1772,14 @@ class GraphBlasBackend(PythonCanonBackend):
 
     def get_data_tensor(self, data: np.ndarray | sp.spmatrix) -> \
             dict[int, dict[int, gb.Vector]]:
-        tensor = data.flatten(order="F")
-        if isinstance(data, sp.spmatrix):
-            tensor = tensor.toarray()
-        return {Constant.ID.value: {Constant.ID.value: gb.Vector.from_dense(tensor,
-                                                                            dtype=int)}}
+        if isinstance(data, np.ndarray):
+            tensor = gb.Vector.from_dense(data.flatten(order="F"))
+        else:
+            tensor = sp.coo_matrix(data).reshape((-1, 1), order="F")
+            tensor = gb.Vector.from_coo(indices=tensor.row,
+                                        values=tensor.data,
+                                        size=tensor.shape[0])
+        return {Constant.ID.value: {Constant.ID.value: tensor}}
 
     def get_param_tensor(self, shape: tuple[int, ...], parameter_id: int) -> \
             dict[int, dict[int, gb.Vector]]:
@@ -2163,6 +2182,8 @@ class GraphBlasTensorView(DictTensorView):
             for parameter_id, parameter_matrix in variable_tensor.items():
                 p = self.param_to_size[parameter_id]
                 m = parameter_matrix.shape[0] // p
+                if isinstance(parameter_matrix, gb.Vector):
+                    parameter_matrix = parameter_matrix._as_matrix()
                 coo_repr = parameter_matrix.to_coo()
                 tensor_representations.append(TensorRepresentation(
                     coo_repr[2],
