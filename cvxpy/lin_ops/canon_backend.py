@@ -38,6 +38,7 @@ from cvxpy.settings import (
 Note: this file is tested extensively with illustrative examples in test_python_backends.py,
 complementing the docstrings of the functions below.
 """
+# gb.init(blocking=True)
 gb.ss.config["format"] = "by_col"
 
 
