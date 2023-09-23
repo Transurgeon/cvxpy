@@ -72,6 +72,7 @@ and returns a scalar.
    :trim:
 
 .. list-table::
+   :class: datatable
    :header-rows: 1
 
    * - Function
@@ -526,6 +527,7 @@ For example, if ``X`` and ``Y`` are both 3 by 3 matrix variables, then ``maximum
 scalars, which are promoted.
 
 .. list-table::
+   :class: datatable
    :header-rows: 1
 
    * - Function
@@ -822,6 +824,7 @@ would have different signs in different entries (for example, when stacking a po
 Expression and a negative Expression) then the returned Expression will have unknown sign.
 
 .. list-table::
+   :class: datatable
    :header-rows: 1
 
    * - Function
