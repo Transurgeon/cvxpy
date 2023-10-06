@@ -18,12 +18,12 @@ from typing import List, Tuple
 
 import numpy as np
 
-from cvxpy.constraints.constraint import Constraint
+from cvxpy.constraints.cones import Cone
 from cvxpy.expressions import cvxtypes
 from cvxpy.utilities import scopes
 
 
-class PowCone3D(Constraint):
+class PowCone3D(Cone):
     """
     An object representing a collection of 3D power cone constraints
 
@@ -71,7 +71,6 @@ class PowCone3D(Constraint):
             raise ValueError(msg)
         super(PowCone3D, self).__init__([self.x, self.y, self.z],
                                         constr_id)
-
     def __str__(self) -> str:
         return "Pow3D(%s, %s, %s; %s)" % (self.x, self.y, self.z, self.alpha)
 
@@ -140,8 +139,23 @@ class PowCone3D(Constraint):
         # TODO: figure out why the reshaping had to be done differently,
         #   relative to ExpCone constraints.
 
+    def _dual_cone(self, *args):
+        """Implements the dual cone of PowCone3D See Pg 85
+        of the MOSEK modelling cookbook for more information"""
+        if args is None:
+            PowCone3D(self.dual_variables[0]/self.alpha, self.dual_variables[1]/(1-self.alpha),
+                      self.dual_variables[2], self.alpha)
+        else:
+            # some assertions for verifying `args`
+            args_shapes = [arg.shape for arg in args]
+            instance_args_shapes = [arg.shape for arg in self.args]
+            assert len(args) == len(self.args)
+            assert args_shapes == instance_args_shapes
+            return PowCone3D(args[0]/self.alpha, args[1]/(1-self.alpha),
+                             args[2], self.alpha)
 
-class PowConeND(Constraint):
+
+class PowConeND(Cone):
     """
     Represents a collection of N-dimensional power cone constraints
     that is *mathematically* equivalent to the following code
@@ -257,5 +271,30 @@ class PowConeND(Constraint):
         return self.is_dcp()
 
     def save_dual_value(self, value) -> None:
-        # TODO: implement
-        pass
+        dW = value[:, :-1]
+        dz = value[:, -1]
+        if self.axis == 0:
+            dW = dW.T
+            dz = dz.T
+        if dW.shape[1] == 1:
+            #NOTE: Targetting problems where duals have the shape
+            # (n, 1) --- dropping the extra dimension is crucial for
+            # the `_dual_cone` and `dual_residual` methods to work properly
+            dW = np.squeeze(dW)
+        self.dual_variables[0].save_value(dW)
+        self.dual_variables[1].save_value(dz)
+
+    def _dual_cone(self, *args):
+        """Implements the dual cone of PowConeND See Pg 85
+        of the MOSEK modelling cookbook for more information"""
+        if args is None or args == ():
+            scaled_duals = self.dual_variables[0]/self.alpha
+            return PowConeND(scaled_duals, self.dual_variables[1], self.alpha, axis=self.axis)
+        else:
+            # some assertions for verifying `args`
+            args_shapes = [arg.shape for arg in args]
+            instance_args_shapes = [arg.shape for arg in self.args]
+            assert len(args) == len(self.args)
+            assert args_shapes == instance_args_shapes
+            assert args[0].value.shape == self.alpha.value.shape
+            return PowConeND(args[0]/self.alpha, args[1], self.alpha, axis=self.axis)
