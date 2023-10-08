@@ -1,0 +1,18 @@
+[package]
+name = "cvxpy_rust"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[lib]
+name = "cvxpy_rust"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.17.1", features = ["extension-module"] }
+numpy = "0.17"
+sprs = "0.11"
+rustc-hash = "1.1"
+
+[profile.release]
+debug=true
