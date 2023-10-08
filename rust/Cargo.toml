@@ -9,8 +9,8 @@ name = "cvxpy_rust"
 crate-type = ["cdylib"]
 
 [dependencies]
-pyo3 = { version = "0.17.1", features = ["extension-module"] }
-numpy = "0.17"
+pyo3 = { version = "0.19.2", features = ["extension-module"] }
+numpy = "0.19.0"
 sprs = "0.11"
 rustc-hash = "1.1"
 

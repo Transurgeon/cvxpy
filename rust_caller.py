@@ -24,17 +24,11 @@ for n in np.logspace(6, 7, 1).astype(int):
     prob.get_problem_data(canon_backend='RUST', solver=cp.SCS)
     timings[n]['RUST'] = time.time() - start
 
-    #start = time.time()
-    #prob.get_problem_data(canon_backend='CPP', solver=cp.SCS)
-    #timings[n]['CPP'] = time.time() - start
+    start = time.time()
+    prob.get_problem_data(canon_backend='CPP', solver=cp.SCS)
+    timings[n]['CPP'] = time.time() - start
 
-    #start = time.time()
-    #prob.get_problem_data(canon_backend='SCIPY', solver=cp.SCS)
-    #timings[n]['SCIPY'] = time.time() - start
-
-#import pandas as pd
-#df = pd.DataFrame(timings).T
-#print(df)
-# plt.figure()
-#df.plot(loglog=True)
-# plt.show()
+    start = time.time()
+    prob.get_problem_data(canon_backend='SCIPY', solver=cp.SCS)
+    timings[n]['SCIPY'] = time.time() - start
+    print(timings)

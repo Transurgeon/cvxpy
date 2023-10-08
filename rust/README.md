@@ -4,7 +4,7 @@ As a prerequisite to building this project, you need to use `pip install maturin
 in the virtual environment you're using for development and ensure that you have
 rust installed.
 
-To typecheck the rust code, run `cargo check` (which is relatively fast).
+To type-check the rust code, run `cargo check` (which is relatively fast).
 
 To do correctness testing, run `maturin develop`. This compiles the code with a
 debug profile and installs it in the virtual environment.
