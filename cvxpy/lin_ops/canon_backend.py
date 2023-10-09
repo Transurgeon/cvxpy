@@ -398,83 +398,6 @@ class PythonCanonBackend(CanonBackend):
         """
         pass  # noqa
 
-
-class RustCanonBackend(CanonBackend):
-    def build_matrix(self, lin_ops: list[LinOp]) -> sp.coo_matrix:
-        import cvxpy_rust
-        self.id_to_col[-1] = self.var_length
-        (data, (row, col), shape) = cvxpy_rust.build_matrix(lin_ops,
-                                                            self.param_size_plus_one,
-                                                            self.id_to_col,
-                                                            self.param_to_size,
-                                                            self.param_to_col,
-                                                            self.var_length)
-        self.id_to_col.pop(-1)
-        return sp.coo_matrix((data, (row, col)), shape)
-
-    @staticmethod
-    def reshape_constant_data(constant_data: Any, new_shape: tuple[int, ...]) -> Any:
-        """
-        Reshape constant data from column format to the required shape for operations that
-        do not require column format
-        """
-        import cvxpy_rust
-        cvxpy_rust.not_impl_error()
-        pass  # noqa
-
-    def concatenate_tensors(self, tensors: list[tuple[TensorView, int]]) -> TensorView:
-        """
-        Takes list of tensors and stacks them along axis 0 (rows).
-        """
-        import cvxpy_rust
-        cvxpy_rust.not_impl_error()
-        pass  # noqa
-
-    def reshape_tensors(self, tensor: TensorView, total_rows: int) -> sp.coo_matrix:
-        """
-        Reshape into 2D scipy coo-matrix in column-major order and transpose.
-        """
-        import cvxpy_rust
-        cvxpy_rust.not_impl_error()
-        pass  # noqa
-
-    def get_empty_view(self) -> TensorView:
-        """
-        Returns an empty view of the corresponding TensorView subclass, coupling the CanonBackend
-        subclass with the TensorView subclass.
-        """
-        import cvxpy_rust
-        cvxpy_rust.not_impl_error()
-        pass  # noqa
-
-    def mul(self, lin: LinOp, view: TensorView) -> TensorView:
-        """
-        Multiply view with constant data from the left
-        """
-        import cvxpy_rust
-        cvxpy_rust.not_impl_error()
-        pass  # noqa
-
-    def get_variable_tensor(self, shape: tuple[int, ...], variable_id: int) -> Any:
-        """
-        Returns tensor of a variable node, i.e., eye(n) across axes 0 and 1, where n i the number of
-        entries of the variable.
-        """
-        import cvxpy_rust
-        cvxpy_rust.not_impl_error()
-        pass  # noqa
-
-    def get_data_tensor(self, data: Any) -> Any:
-        """
-        Returns tensor of constant node as a column vector.
-        """
-        import cvxpy_rust
-        cvxpy_rust.not_impl_error()
-        pass  # noqa
-
-
-class ScipyCanonBackend(CanonBackend):
-
     @staticmethod
     def index(lin: LinOp, view: TensorView) -> TensorView:
         """
@@ -682,6 +605,80 @@ class ScipyCanonBackend(CanonBackend):
         Returns tensor of a parameter node, i.e., eye(n) across axes 0 and 2, where n is
         the size of the parameter.
         """
+        pass  # noqa
+
+
+class RustCanonBackend(CanonBackend):
+    def build_matrix(self, lin_ops: list[LinOp]) -> sp.coo_matrix:
+        import cvxpy_rust
+        self.id_to_col[-1] = self.var_length
+        (data, (row, col), shape) = cvxpy_rust.build_matrix(lin_ops,
+                                                            self.param_size_plus_one,
+                                                            self.id_to_col,
+                                                            self.param_to_size,
+                                                            self.param_to_col,
+                                                            self.var_length)
+        self.id_to_col.pop(-1)
+        return sp.coo_matrix((data, (row, col)), shape)
+
+    @staticmethod
+    def reshape_constant_data(constant_data: Any, new_shape: tuple[int, ...]) -> Any:
+        """
+        Reshape constant data from column format to the required shape for operations that
+        do not require column format
+        """
+        import cvxpy_rust
+        cvxpy_rust.not_impl_error()
+        pass  # noqa
+
+    def concatenate_tensors(self, tensors: list[tuple[TensorView, int]]) -> TensorView:
+        """
+        Takes list of tensors and stacks them along axis 0 (rows).
+        """
+        import cvxpy_rust
+        cvxpy_rust.not_impl_error()
+        pass  # noqa
+
+    def reshape_tensors(self, tensor: TensorView, total_rows: int) -> sp.coo_matrix:
+        """
+        Reshape into 2D scipy coo-matrix in column-major order and transpose.
+        """
+        import cvxpy_rust
+        cvxpy_rust.not_impl_error()
+        pass  # noqa
+
+    def get_empty_view(self) -> TensorView:
+        """
+        Returns an empty view of the corresponding TensorView subclass, coupling the CanonBackend
+        subclass with the TensorView subclass.
+        """
+        import cvxpy_rust
+        cvxpy_rust.not_impl_error()
+        pass  # noqa
+
+    def mul(self, lin: LinOp, view: TensorView) -> TensorView:
+        """
+        Multiply view with constant data from the left
+        """
+        import cvxpy_rust
+        cvxpy_rust.not_impl_error()
+        pass  # noqa
+
+    def get_variable_tensor(self, shape: tuple[int, ...], variable_id: int) -> Any:
+        """
+        Returns tensor of a variable node, i.e., eye(n) across axes 0 and 1, where n i the number of
+        entries of the variable.
+        """
+        import cvxpy_rust
+        cvxpy_rust.not_impl_error()
+        pass  # noqa
+
+    def get_data_tensor(self, data: Any) -> Any:
+        """
+        Returns tensor of constant node as a column vector.
+        """
+        import cvxpy_rust
+        cvxpy_rust.not_impl_error()
         pass  # noqa
 
 

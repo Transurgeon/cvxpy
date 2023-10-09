@@ -114,17 +114,10 @@ impl<'a> TensorView<'a> {
     }
 
     pub fn rows(&self) -> usize {
-        (self
-            .tensor
-            .iter()
-            .next()
-            .unwrap()
-            .1
-            .iter()
-            .next()
-            .unwrap()
-            .1)[0]
-            .rows()
+        (self.tensor.iter().next()
+            .unwrap().1.iter().next()
+            .unwrap().1
+        )[0].rows()
     }
 
     pub fn get_tensor_repr(&self, offset: u64, context: &Context) -> TensorRepresentation {

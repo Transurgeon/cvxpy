@@ -1,4 +1,4 @@
-#![allow(non_snake_case)] // A lot of linear algebra in this file where we ant capital matrices
+#![allow(non_snake_case)] // A lot of linear algebra in this file where we want capital matrices
 
 use sprs::{CsMatI, TriMatI};
 
