@@ -72,7 +72,7 @@ and returns a scalar.
    :trim:
 
 .. list-table::
-   :class: datatable
+   :class: scalar
    :header-rows: 1
 
    * - Function
