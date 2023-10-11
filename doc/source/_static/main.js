@@ -1,7 +1,7 @@
 $(document).ready(function() {
   // Create radio buttons and insert them before the table
   var radioButtons = `
-    <h3>Curvature</h3>
+    <h3>Curvature Filter</h3>
     <form id="filterForm">
       <label>
         <input type="radio" name="filter" value="all" checked> All
@@ -34,33 +34,37 @@ $(document).ready(function() {
       // Create a container div
     var containerDiv = $('<div>');
 
-    var convexTable = `
+    var convexTableTitle = `
+      <div>
       <h3>Table of only Convex Atoms</h3>
+      </div>
     `;
       // Create a new table after the original one
     var newTable = $('<table>').addClass('convex-view');
 
         // Get the filtered data from column 4 and extract the text from the <p> elements
-    var filteredData = table.column(4).search("convex").data().toArray().map(function(cell) {
-      var pElement = $(cell).find('p');
-      return pElement.text();
-    });
+    const convexData = $('table.scalar').DataTable().data().toArray().filter(row => $(row[4]).text().trim() === 'convex');
+
     // Add the filtered data to the new table
     newTable.DataTable({
-      data: filteredData,
+      data: convexData,
       columns: [
         { title: "Function" },
         { title: "Meaning" },
         { title: "Domain" },
         { title: "Sign" },
+        { title: "Curvature", visible: false },
         { title: "Monotonicity" },
       ]
     });
 
     // Append both convexTable and newTable to the container
-    containerDiv.append(convexTable);
+    containerDiv.append(convexTableTitle);
     containerDiv.append(newTable);
 
-    // Insert the container after the original table
-    $('table.scalar').after(containerDiv);
+    // Select the element containing the pagination controls (assuming it has a class like 'dataTables_paginate')
+    var paginateControls = $('table.scalar').closest('.dataTables_wrapper').find('.dataTables_paginate');
+
+    // Insert the container after the pagination controls
+    paginateControls.after(containerDiv);
 });
