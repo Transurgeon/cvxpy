@@ -14,8 +14,8 @@ $(document).ready(function() {
       </label>
     </form>
   `;
-
-  $('table.scalar').before(radioButtons);
+  var dropdownContent = document.querySelector(".sd-card-text");
+  dropdownContent.innerHTML = radioButtons
 
   // Initialize DataTable
   var table = $('table.scalar').DataTable();
