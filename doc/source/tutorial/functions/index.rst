@@ -62,6 +62,11 @@ For any CVXPY expression ``expr``,
 the power operator ``expr**p`` is equivalent to
 the function ``power(expr, p)``.
 
+.. dropdown:: Filters
+    :name: scalar-drop
+
+    Dropdown content
+
 Scalar functions
 ----------------
 
