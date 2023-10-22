@@ -67,6 +67,10 @@ the function ``power(expr, p)``.
 
     Dropdown content
 
+.. csv-table:: Table Title
+   :file: ../atomic-functions.csv
+   :header-rows: 1
+
 Scalar functions
 ----------------
 
