@@ -656,6 +656,23 @@ class RustCanonBackend(CanonBackend):
         cvxpy_rust.not_impl_error()
         pass  # noqa
 
+    def get_func(self, func_name: str) -> Callable:
+        """
+        Map the name of a function as given by the linOp to the implementation.
+
+        Parameters
+        ----------
+        func_name: The name of the function.
+
+        Returns
+        -------
+        The function implementation.
+        """
+        mapping = {
+            "mul": self.mul,
+        }
+        return mapping[func_name]
+
     def mul(self, lin: LinOp, view: TensorView) -> TensorView:
         """
         Multiply view with constant data from the left
@@ -1920,3 +1937,30 @@ class SciPyTensorView(DictTensorView):
         sparse matrix instead of smaller sparse matrices in a list.
         """
         return sp.spmatrix
+
+
+class RustTensorView(DictTensorView):
+    @staticmethod
+    def add_tensors(a: Any, b: Any) -> Any:
+        pass
+
+    @staticmethod
+    def tensor_type():
+        pass
+
+    @property
+    def rows(self) -> int:
+        import cvxpy_rust
+        cvxpy_rust
+
+    def get_tensor_representation(self, row_offset: int) -> TensorRepresentation:
+        pass
+
+    def select_rows(self, rows: np.ndarray) -> None:
+        pass
+
+    def apply_all(self, func: Callable) -> None:
+        pass
+
+    def create_new_tensor_view(self, variable_ids: set[int], tensor: Any, is_parameter_free: bool) -> TensorView:
+        pass
