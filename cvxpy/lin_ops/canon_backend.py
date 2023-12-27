@@ -609,13 +609,7 @@ class PythonCanonBackend(CanonBackend):
 
 
 class RustCanonBackend(CanonBackend):
-    """
-    The rust canonicalization backend is currently WIP and cannot be used.
-    For additional information, a proof of concept pull request can be found here:
-    https://github.com/phschiele/cvxpy/pull/31
-    """
-
-    def build_matrix(self, lin_ops: list[LinOp]) -> sp.csc_matrix:
+    def build_matrix(self, lin_ops: list[LinOp]) -> sp.coo_matrix:
         import cvxpy_rust
         self.id_to_col[-1] = self.var_length
         (data, (row, col), shape) = cvxpy_rust.build_matrix(lin_ops,
@@ -625,7 +619,84 @@ class RustCanonBackend(CanonBackend):
                                                             self.param_to_col,
                                                             self.var_length)
         self.id_to_col.pop(-1)
-        return sp.csc_matrix((data, (row, col)), shape)
+        return sp.coo_matrix((data, (row, col)), shape)
+
+    @staticmethod
+    def reshape_constant_data(constant_data: Any, new_shape: tuple[int, ...]) -> Any:
+        """
+        Reshape constant data from column format to the required shape for operations that
+        do not require column format
+        """
+        import cvxpy_rust
+        cvxpy_rust.not_impl_error()
+        pass  # noqa
+
+    def concatenate_tensors(self, tensors: list[tuple[TensorView, int]]) -> TensorView:
+        """
+        Takes list of tensors and stacks them along axis 0 (rows).
+        """
+        import cvxpy_rust
+        cvxpy_rust.not_impl_error()
+        pass  # noqa
+
+    def reshape_tensors(self, tensor: TensorView, total_rows: int) -> sp.coo_matrix:
+        """
+        Reshape into 2D scipy coo-matrix in column-major order and transpose.
+        """
+        import cvxpy_rust
+        cvxpy_rust.not_impl_error()
+        pass  # noqa
+
+    def get_empty_view(self) -> TensorView:
+        """
+        Returns an empty view of the corresponding TensorView subclass, coupling the CanonBackend
+        subclass with the TensorView subclass.
+        """
+        import cvxpy_rust
+        cvxpy_rust.not_impl_error()
+        pass  # noqa
+
+    def get_func(self, func_name: str) -> Callable:
+        """
+        Map the name of a function as given by the linOp to the implementation.
+
+        Parameters
+        ----------
+        func_name: The name of the function.
+
+        Returns
+        -------
+        The function implementation.
+        """
+        mapping = {
+            "mul": self.mul,
+        }
+        return mapping[func_name]
+
+    def mul(self, lin: LinOp, view: TensorView) -> TensorView:
+        """
+        Multiply view with constant data from the left
+        """
+        import cvxpy_rust
+        cvxpy_rust.not_impl_error()
+        pass  # noqa
+
+    def get_variable_tensor(self, shape: tuple[int, ...], variable_id: int) -> Any:
+        """
+        Returns tensor of a variable node, i.e., eye(n) across axes 0 and 1, where n i the number of
+        entries of the variable.
+        """
+        import cvxpy_rust
+        cvxpy_rust.not_impl_error()
+        pass  # noqa
+
+    def get_data_tensor(self, data: Any) -> Any:
+        """
+        Returns tensor of constant node as a column vector.
+        """
+        import cvxpy_rust
+        cvxpy_rust.not_impl_error()
+        pass  # noqa
 
 
 class NumPyCanonBackend(PythonCanonBackend):
@@ -1866,3 +1937,30 @@ class SciPyTensorView(DictTensorView):
         sparse matrix instead of smaller sparse matrices in a list.
         """
         return sp.spmatrix
+
+
+class RustTensorView(DictTensorView):
+    @staticmethod
+    def add_tensors(a: Any, b: Any) -> Any:
+        pass
+
+    @staticmethod
+    def tensor_type():
+        pass
+
+    @property
+    def rows(self) -> int:
+        import cvxpy_rust
+        cvxpy_rust
+
+    def get_tensor_representation(self, row_offset: int) -> TensorRepresentation:
+        pass
+
+    def select_rows(self, rows: np.ndarray) -> None:
+        pass
+
+    def apply_all(self, func: Callable) -> None:
+        pass
+
+    def create_new_tensor_view(self, variable_ids: set[int], tensor: Any, is_parameter_free: bool) -> TensorView:
+        pass

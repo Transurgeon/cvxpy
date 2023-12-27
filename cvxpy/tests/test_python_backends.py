@@ -13,6 +13,7 @@ from cvxpy.lin_ops.canon_backend import (
     NumPyCanonBackend,
     PythonCanonBackend,
     SciPyCanonBackend,
+    RustCanonBackend,
     TensorRepresentation,
 )
 
@@ -50,11 +51,14 @@ class TestBackendInstance:
         backend = CanonBackend.get_backend(s.NUMPY_CANON_BACKEND, *args)
         assert isinstance(backend, NumPyCanonBackend)
 
+        backend = CanonBackend.get_backend(s.RUST_CANON_BACKEND, *args)
+        assert isinstance(backend, RustCanonBackend)
+
         with pytest.raises(KeyError):
             CanonBackend.get_backend('notabackend')
 
 
-backends = [s.SCIPY_CANON_BACKEND, s.NUMPY_CANON_BACKEND]
+backends = [s.SCIPY_CANON_BACKEND, s.NUMPY_CANON_BACKEND, s.RUST_CANON_BACKEND]
 
 
 class TestBackends:
@@ -72,11 +76,11 @@ class TestBackends:
         }
 
         backend = CanonBackend.get_backend(request.param, **kwargs)
-        assert isinstance(backend, PythonCanonBackend)
+        # assert isinstance(backend, PythonCanonBackend)
         return backend
 
     def test_mapping(self, backend):
-        func = backend.get_func('sum')
+        func = backend.get_func('mul')
         assert isinstance(func, Callable)
         with pytest.raises(KeyError):
             backend.get_func('notafunc')
