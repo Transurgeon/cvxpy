@@ -15,6 +15,7 @@ limitations under the License.
 """
 from __future__ import annotations
 
+import sys
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
@@ -1062,7 +1063,17 @@ class SciPyCanonBackend(PythonCanonBackend):
 
             def func(x, p):
                 if p == 1:
-                    return (stacked_lhs @ x).tocsr()
+                    output = (stacked_lhs @ x).tocsr()
+                    if stacked_lhs.shape[0] >= 60000:
+                        print("Currently in multiply")
+                        print("Stacked LHS shape:", stacked_lhs.shape)
+                        print("RHS shape:", x.shape)
+                        filename = "unconstrainedQP"
+                        sp.save_npz(f'{filename}/sparse-mm-lhs', stacked_lhs)
+                        sp.save_npz(f'{filename}/sparse-mm-rhs', x)
+                        sp.save_npz(f'{filename}/sparse-mm-out', output)
+                        sys.exit()
+                    return output
                 else:
                     return ((sp.kron(sp.eye(p, format="csc"), stacked_lhs)) @ x).tocsc()
         else:
@@ -1418,7 +1429,11 @@ class SciPyCanonBackend(PythonCanonBackend):
             assert p == 1, \
                 "SciPy backend does not support parametrized right operand for kron_r."
             assert x.ndim == 2
+            print("Currently in kron right")
+            print("Stacked LHS shape:", lhs.shape)
+            print("RHS shape:", x.shape)
             kron_res = sp.kron(lhs, x).tocsr()
+            print(kron_res.shape)
             kron_res = kron_res[row_idx, :]
             return kron_res
 
@@ -1447,6 +1462,9 @@ class SciPyCanonBackend(PythonCanonBackend):
                 "SciPy backend does not support parametrized left operand for kron_l."
             assert x.ndim == 2
             kron_res = sp.kron(x, rhs).tocsr()
+            print("Currently in kron left")
+            print("Stacked LHS shape:", rhs.shape)
+            print("RHS shape:", x.shape)
             kron_res = kron_res[row_idx, :]
             return kron_res
 
