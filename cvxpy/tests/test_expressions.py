@@ -19,6 +19,8 @@ import warnings
 import numpy as np
 import pytest
 import scipy.sparse as sp
+from hypothesis import given
+from hypothesis.extra.numpy import integer_array_indices
 
 import cvxpy as cp
 import cvxpy.interface.matrix_utilities as intf
@@ -1559,6 +1561,24 @@ class TestND_Expressions():
     def test_nd_sum(self, axis) -> None:
         expr = cp.sum(self.x, axis=axis, keepdims=True)
         y = self.target.sum(axis=axis, keepdims=True)
+        prob = cp.Problem(self.obj, [expr == y])
+        prob.solve(canon_backend=cp.SCIPY_CANON_BACKEND)
+        assert np.allclose(expr.value, y)
+
+    """
+    @pytest.mark.parametrize("axis", [(0),(1),(2)])
+    def test_nd_max(self, axis) -> None:
+        expr = cp.max(self.x, axis=axis, keepdims=True)
+        y = self.target.min(axis=axis, keepdims=True)
+        prob = cp.Problem(self.obj, [expr <= y])
+        prob.solve(canon_backend=cp.SCIPY_CANON_BACKEND)
+        assert np.allclose(expr.value, y)
+    """
+
+    @given(integer_array_indices(shape=(2,2,2)))
+    def test_nd_index(self, s) -> None:
+        expr = self.x[s]
+        y = self.target[s]
         prob = cp.Problem(self.obj, [expr == y])
         prob.solve(canon_backend=cp.SCIPY_CANON_BACKEND)
         assert np.allclose(expr.value, y)
