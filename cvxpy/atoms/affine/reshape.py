@@ -48,9 +48,11 @@ class reshape(AffAtom):
     def __init__(self, expr, shape: int | Tuple[int, ...], order: str = 'F') -> None:
         if isinstance(shape, numbers.Integral):
             shape = (int(shape),)
+        """
         if len(shape) > 2:
             raise ValueError("Expressions of dimension greater than 2 "
                              "are not supported.")
+        """
         if any(d == -1 for d in shape):
             shape = self._infer_shape(shape, expr.size)
 

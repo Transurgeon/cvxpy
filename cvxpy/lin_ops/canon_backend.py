@@ -430,15 +430,19 @@ class PythonCanonBackend(CanonBackend):
     def index(lin: LinOp, view: TensorView) -> TensorView:
         """
         Given (A, b) in view, select the rows corresponding to the elements of the expression being
-        indexed.
+        indexed. Supports an arbitrary number of dimensions.
         """
         indices = [np.arange(s.start, s.stop, s.step) for s in lin.data]
-        if len(indices) == 1:
-            rows = indices[0]
-        elif len(indices) == 2:
-            rows = np.add.outer(indices[0], indices[1] * lin.args[0].shape[0]).flatten(order="F")
-        else:
-            raise ValueError
+        rows = indices[0]
+        cum_prod = np.cumprod([lin.args[0].shape])
+        
+        # For each additional dimension, calculate the offset and add it to the rows
+        for i in range(1, len(indices)): 
+            # Product of sizes of all previous dimensions
+            size_product = cum_prod[i - 1]
+            offset = np.add.outer(rows, indices[i] * size_product).flatten(order="F")
+            rows = offset
+        
         view.select_rows(rows)
         return view
 
@@ -770,6 +774,7 @@ class NumPyCanonBackend(PythonCanonBackend):
                 p = x.shape[0]
                 if isinstance(axis, tuple):
                     d = np.prod([shape[i] for i in axis], dtype=int)
+                    # TODO comment
                     axis = tuple([a + 1 for a in axis])
                 else:
                     d = shape[axis]
@@ -1205,6 +1210,7 @@ class SciPyCanonBackend(PythonCanonBackend):
                         d = np.prod([shape[i] for i in axis], dtype=int)
                     else:
                         d = shape[axis]
+                    # TODO keep sparse
                     x = x.toarray().reshape((shape)+(n,), order='F').sum(axis=axis)
                     return sp.csr_matrix(x.reshape((n//d, n), order='F'))
             else:

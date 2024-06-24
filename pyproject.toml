@@ -81,6 +81,13 @@ SCIPY = ["scipy"]
 SCS = ["setuptools>65.5.1"]
 XPRESS = ["xpress"]
 DAQP = ["daqp"]
+test = ["pytest", "hypothesis"]
+doc = ["sphinx",
+       "sphinxcontrib.jquery",
+       "sphinx-inline-tabs",
+       "sphinx-design",
+       "sphinx-immaterial>=0.11.7"]
+
 
 [project.readme]
 file = "README.md"
