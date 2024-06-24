@@ -378,6 +378,8 @@ def sum_entries(operator, shape: Tuple[int, ...], axis=None, keepdims=None):
         The operator to sum the entries of.
     shape : tuple
         The shape of the sum.
+    axis: bbfbf
+    keepdims: bool
 
     Returns
     -------

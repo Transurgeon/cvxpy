@@ -88,6 +88,8 @@ class cumsum(AffAtom, AxisAtom):
         """
         return self.args[0].shape
 
+    # TODO add validate_args
+
     def _grad(self, values):
         """Gives the (sub/super)gradient of the atom w.r.t. each argument.
 

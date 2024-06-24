@@ -223,6 +223,14 @@ def construct_solving_chain(problem, candidates,
         Raised if no suitable solver exists among the installed solvers, or
         if the target solver is not installed.
     """
+    # TODO look at problem and set canon_backend
+    canon_backend = _get_canon_backend(problem, canon_backend)
+    # TODO the correct test is to examine all nodes in the expression tree
+    # and find the largest ndim
+    max([p.ndim for p in problem.parameters()])
+    max([p.ndim for p in problem.variables()])
+    # if problem contains an nd > 2 expression, then default to SCIPY
+    # and throw error if CPP is specified.
     if len(problem.variables()) == 0:
         return SolvingChain(reductions=[ConstantSolver()])
     reductions = _reductions_for_problem_class(problem, candidates, gp, solver_opts)
@@ -375,6 +383,10 @@ def construct_solving_chain(problem, candidates,
                       "enough constraints in the problem." % (
                           candidates['conic_solvers'],
                           ", ".join([cone.__name__ for cone in cones])))
+
+
+def _get_canon_backend(problem, canon_backend):
+    pass
 
 
 class SolvingChain(Chain):

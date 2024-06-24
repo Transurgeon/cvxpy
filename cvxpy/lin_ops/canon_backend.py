@@ -774,6 +774,7 @@ class NumPyCanonBackend(PythonCanonBackend):
                 p = x.shape[0]
                 if isinstance(axis, tuple):
                     d = np.prod([shape[i] for i in axis], dtype=int)
+                    # TODO comment
                     axis = tuple([a + 1 for a in axis])
                 else:
                     d = shape[axis]
@@ -1209,6 +1210,7 @@ class SciPyCanonBackend(PythonCanonBackend):
                         d = np.prod([shape[i] for i in axis], dtype=int)
                     else:
                         d = shape[axis]
+                    # TODO keep sparse
                     x = x.toarray().reshape((shape)+(n,), order='F').sum(axis=axis)
                     return sp.csr_matrix(x.reshape((n//d, n), order='F'))
             else:

@@ -175,7 +175,8 @@ def make_linC_from_linPy(linPy, linPy_to_linC) -> None:
     linC = cvxcore.LinOp(typ, shape, lin_args_vec)
     linPy_to_linC[linPy] = linC
 
-    if linPy.data is not None:
+    # TODO special case for sum_entries to make sure it's treated as data is None
+    if linPy.data is not None and linPy.type != "sum_entries":
         if isinstance(linPy.data, lo.LinOp):
             linC_data = linPy_to_linC[linPy.data]
             linC.set_linOp_data(linC_data)
