@@ -1576,3 +1576,10 @@ class TestND_Expressions():
         prob = cp.Problem(self.obj, [expr == y])
         prob.solve(canon_backend=cp.SCIPY_CANON_BACKEND)
         assert np.allclose(expr.value, y)
+
+    def test_nd_matmul(self) -> None:
+        A = np.random.randn(2,2)
+        expr = self.x @ A
+        prob = cp.Problem(self.obj, [expr == self.target @ A])
+        prob.solve(canon_backend=cp.SCIPY_CANON_BACKEND)
+        assert np.allclose(expr.value, self.target)

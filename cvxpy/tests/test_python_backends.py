@@ -1935,6 +1935,40 @@ class TestND_Backends:
         # Note: view is edited in-place:
         assert out_view.get_tensor_representation(0, 4) == view.get_tensor_representation(0, 4)
 
+    def test_nd_mul(self, backend):
+        """
+        define x = Variable((2,2,2)) with
+        [[[x111, x112],
+        [x121, x122]],
+
+        [[x211, x212],
+        [x221, x222]]]
+
+        x is represented as eye(8) in the A matrix (in column-major order), i.e.,
+
+        x111 x211
+        """
+        variable_lin_op = linOpHelper((2, 2, 2), type="variable", data=1)
+        view = backend.process_constraint(variable_lin_op, backend.get_empty_view())
+
+        # cast to numpy
+        view_A = view.get_tensor_representation(0, 8)
+        view_A = sp.coo_matrix((view_A.data, (view_A.row, view_A.col)), shape=(8, 8)).toarray()
+        assert np.all(view_A == np.eye(8))
+
+        rhs = linOpHelper((2, 2, 2), type="variable", data=2)
+
+        mul_lin_op = linOpHelper(data=rhs, args=[variable_lin_op])
+        out_view = backend.mul(mul_lin_op, view)
+        A = out_view.get_tensor_representation(0, 8)
+
+        # cast to numpy
+        A = sp.coo_matrix((A.data, (A.row, A.col)), shape=(8, 8)).toarray()
+        assert np.all(A == np.eye(8))
+
+        # Note: view is edited in-place:
+        assert out_view.get_tensor_representation(0, 8) == view.get_tensor_representation(0, 8)
+
 
 class TestNumPyBackend:
     @staticmethod
