@@ -97,7 +97,7 @@ def mul_shapes_promote(
             tuple(list(lh_shape[:-2]) + [lh_mat_shape[0]] + [rh_mat_shape[1]]))
 
 
-def mul_shapes(lh_shape: Tuple[int, ...], rh_shape: Tuple[int, ...]) -> Tuple[int, ...]:
+def mul_shapes2(lh_shape: Tuple[int, ...], rh_shape: Tuple[int, ...]) -> Tuple[int, ...]:
     """Give the shape resulting from multiplying two shapes.
 
     Adheres the semantics of np.matmul and additionally permits multiplication
@@ -129,10 +129,36 @@ def mul_shapes(lh_shape: Tuple[int, ...], rh_shape: Tuple[int, ...]) -> Tuple[in
         shape = shape[:-1]
     return shape
 
+def mul_shapes(lh_shape, rh_shape):
+    original_lh_dim = len(lh_shape)
+    original_rh_dim = len(rh_shape)
 
-def mul_shapes2(lh_shape: Tuple[int, ...], rh_shape: Tuple[int, ...]) -> Tuple[int, ...]:
-    return np.broadcast_shapes(lh_shape, rh_shape)
+    # Promote 1D lh_shape to 2D by prepending a 1
+    if original_lh_dim == 1:
+        lh_shape = (1,) + lh_shape
 
+    # Promote 1D rh_shape to 2D by appending a 1
+    if original_rh_dim == 1:
+        rh_shape = rh_shape + (1,)
+
+    # Check for compatibility of inner dimensions
+    if lh_shape[-1] != rh_shape[-2]:
+        raise ValueError("Inner dimensions of matrices do not match for matrix multiplication.")
+
+    # Calculate resulting shape for higher-dimensional arrays
+    if len(lh_shape) > 2 or len(rh_shape) > 2:
+        broadcasted_outer_dims = np.broadcast_shapes(lh_shape[:-2], rh_shape[:-2])
+        result_shape = broadcasted_outer_dims + (lh_shape[-2], rh_shape[-1])
+    else:
+        result_shape = (lh_shape[-2], rh_shape[-1])
+
+    # Adjust the result shape based on original dimensions
+    if original_lh_dim == 1:
+        result_shape = result_shape[1:]  # Remove the prepended 1 for lh_shape
+    if original_rh_dim == 1:
+        result_shape = result_shape[:-1]  # Remove the appended 1 for rh_shape
+
+    return result_shape
 
 def size_from_shape(shape) -> int:
     """ Compute the size of a given shape by multiplying the sizes of each axis.
