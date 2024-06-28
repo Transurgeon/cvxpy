@@ -79,25 +79,25 @@ def mul_shapes_promote(
     """
     if not lh_shape or not rh_shape:
         raise ValueError("Multiplication by scalars is not permitted.")
+    # Promote 1D shapes to 2D
+    lh_shape = (1,) + lh_shape if len(lh_shape) == 1 else lh_shape
+    rh_shape = rh_shape + (1,) if len(rh_shape) == 1 else rh_shape
 
-    if len(lh_shape) == 1:
-        lh_shape = (1,) + lh_shape
-    if len(rh_shape) == 1:
-        rh_shape = rh_shape + (1,)
+    if lh_shape[-1] != rh_shape[-2]:
+        raise ValueError("Incompatible dimensions %s %s" % (lh_shape, rh_shape))
 
-    lh_mat_shape = lh_shape[-2:]
-    rh_mat_shape = rh_shape[-2:]
-    if lh_mat_shape[1] != rh_mat_shape[0]:
-        raise ValueError("Incompatible dimensions %s %s" % (
-            lh_shape, rh_shape))
-    if lh_shape[:-2] != rh_shape[:-2]:
-        raise ValueError("Incompatible dimensions %s %s" % (
-            lh_shape, rh_shape))
-    return (lh_shape, rh_shape,
-            tuple(list(lh_shape[:-2]) + [lh_mat_shape[0]] + [rh_mat_shape[1]]))
+    # Calculate resulting shape for higher-dimensional arrays
+    if len(lh_shape) > 2 or len(rh_shape) > 2:
+        try:
+            outer_dims = np.broadcast_shapes(lh_shape[:-2], rh_shape[:-2])
+        except ValueError:
+            raise ValueError("Incompatible dimensions %s %s" % (lh_shape, rh_shape))
+        shape = outer_dims + (lh_shape[-2], rh_shape[-1])
+    else:
+        shape = (lh_shape[-2], rh_shape[-1])
+    return (lh_shape, rh_shape, shape)
 
-
-def mul_shapes2(lh_shape: Tuple[int, ...], rh_shape: Tuple[int, ...]) -> Tuple[int, ...]:
+def mul_shapes(lh_shape: Tuple[int, ...], rh_shape: Tuple[int, ...]) -> Tuple[int, ...]:
     """Give the shape resulting from multiplying two shapes.
 
     Adheres the semantics of np.matmul and additionally permits multiplication
@@ -124,12 +124,11 @@ def mul_shapes2(lh_shape: Tuple[int, ...], rh_shape: Tuple[int, ...]) -> Tuple[i
     rh_old = rh_shape
     lh_shape, rh_shape, shape = mul_shapes_promote(lh_shape, rh_shape)
     if lh_shape != lh_old:
-        shape = shape[1:]
+        shape = shape[:-2] + (shape[-1],)
     if rh_shape != rh_old:
         shape = shape[:-1]
     return shape
 
-def mul_shapes(lh_shape, rh_shape):
     original_lh_dim = len(lh_shape)
     original_rh_dim = len(rh_shape)
 

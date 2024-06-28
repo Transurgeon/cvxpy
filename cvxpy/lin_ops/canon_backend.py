@@ -275,7 +275,7 @@ class PythonCanonBackend(CanonBackend):
             # constant_view has the data stored in column format.
             # Some operations (like mul) do not require column format, so we need to reshape
             # according to lin_op.shape.
-            lin_op_shape = lin_op.shape if len(lin_op.shape) == 2 else [1, lin_op.shape[0]]
+            lin_op_shape = lin_op.shape if len(lin_op.shape) >= 2 else [1, lin_op.shape[0]]
             constant_data = self.reshape_constant_data(constant_data, lin_op_shape)
 
         data_to_return = constant_data[Constant.ID.value] if constant_view.is_parameter_free \
@@ -715,6 +715,8 @@ class NumPyCanonBackend(PythonCanonBackend):
             assert isinstance(lhs, np.ndarray)
             reps = view.rows // lhs.shape[-1]
             stacked_lhs = np.kron(np.eye(reps), lhs)
+            if len(lin.shape) > 2:
+                stacked_lhs = np.kron(np.kron(np.eye(lin.shape[-1]), lhs), np.eye(lin.shape[0]))
 
             def func(x):
                 return stacked_lhs @ x
