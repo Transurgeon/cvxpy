@@ -24,6 +24,7 @@ import numpy as np
 import scipy.sparse as sp
 from scipy.signal import convolve
 
+import cvxpy.settings as s
 from cvxpy.lin_ops import LinOp
 from cvxpy.settings import (
     NUMPY_CANON_BACKEND,
@@ -226,7 +227,8 @@ class PythonCanonBackend(CanonBackend):
         # Leaf nodes
         if lin_op.type == "variable":
             assert isinstance(lin_op.data, int)
-            assert len(lin_op.shape) in {0, 1, 2}
+            if not s.ALLOW_ND_EXPR:
+                 assert len(lin_op.shape) in {0, 1, 2}
             variable_tensor = self.get_variable_tensor(lin_op.shape, lin_op.data)
             return empty_view.create_new_tensor_view({lin_op.data}, variable_tensor,
                                                      is_parameter_free=True)
@@ -275,7 +277,7 @@ class PythonCanonBackend(CanonBackend):
             # constant_view has the data stored in column format.
             # Some operations (like mul) do not require column format, so we need to reshape
             # according to lin_op.shape.
-            lin_op_shape = lin_op.shape if len(lin_op.shape) == 2 else [1, lin_op.shape[0]]
+            lin_op_shape = lin_op.shape if len(lin_op.shape) >= 2 else [1, lin_op.shape[0]]
             constant_data = self.reshape_constant_data(constant_data, lin_op_shape)
 
         data_to_return = constant_data[Constant.ID.value] if constant_view.is_parameter_free \
@@ -715,6 +717,8 @@ class NumPyCanonBackend(PythonCanonBackend):
             assert isinstance(lhs, np.ndarray)
             reps = view.rows // lhs.shape[-1]
             stacked_lhs = np.kron(np.eye(reps), lhs)
+            if len(lin.shape) > 2:
+                stacked_lhs = np.kron(np.kron(np.eye(lin.shape[-1]), lhs), np.eye(lin.shape[0]))
 
             def func(x):
                 return stacked_lhs @ x
@@ -758,10 +762,36 @@ class NumPyCanonBackend(PythonCanonBackend):
     def sum_entries(_lin: LinOp, view: NumPyTensorView) -> NumPyTensorView:
         """
         Given (A, b) in view, return the sum of the representation
-        on the row axis, ie: (sum(A,axis=1), sum(b, axis=1)).
+        on the row axis, ie: (sum(A,axis=axis), sum(b, axis=axis)).
+
+        Note for new n-dimensional version: We now pass an axis parameter to the sum.
+        The new implementation keeps the columns of the tensor fixed and reshapes the
+        remaining dimensions in the original shape of the expression. The sum is then
+        performed along the axis parameter. Finally, the tensor is reshaped back to the
+        desired output shape. 
+
+        Example:
+        # Suppose we want to sum a Variable(2,2,2)
+        x = np.eye(8)
+        out = x.reshape(2,2,2,8).sum(axis=axis).reshape(n // prod(shape[axis]),8)
         """
         def func(x):
-            return x.sum(axis=1, keepdims=True)
+            axis, _ = _lin.data
+            if axis is None:
+                return x.sum(axis=1, keepdims=True)
+            else:
+                shape = _lin.args[0].shape
+                n = x.shape[-1]
+                p = x.shape[0]
+                if isinstance(axis, tuple):
+                    d = np.prod([shape[i] for i in axis], dtype=int)
+                    # adding offset of 1 to every axis because of param axis.
+                    axis = tuple([a + 1 for a in axis])
+                else:
+                    d = shape[axis]
+                    axis += 1
+                x = x.reshape((p,)+(shape)+(n,), order='F').sum(axis=axis)
+                return x.reshape((p, n//d, n), order='F')
 
         view.apply_all(func)
         return view
@@ -1175,13 +1205,35 @@ class SciPyCanonBackend(PythonCanonBackend):
     def sum_entries(_lin: LinOp, view: SciPyTensorView) -> SciPyTensorView:
         """
         Given (A, b) in view, return the sum of the representation
-        on the row axis, ie: (sum(A,axis=0), sum(b, axis=0)).
+        on the row axis, ie: (sum(A,axis=axis), sum(b, axis=axis)).
         Here, since the slices are stacked, we sum over the rows corresponding
         to the same slice.
+
+        Note for new n-dimensional version: We now pass an axis parameter to the sum.
+        The new implementation keeps the columns of the tensor fixed and reshapes the
+        remaining dimensions in the original shape of the expression. The sum is then
+        performed along the axis parameter. Finally, the tensor is reshaped back to the
+        desired output shape. 
+
+        Example:
+        # Suppose we want to sum a Variable(2,2,2)
+        x = np.eye(8)
+        out = x.reshape(2,2,2,8).sum(axis=axis).reshape(n // prod(shape[axis]),8)
         """
         def func(x, p):
             if p == 1:
-                return sp.csr_matrix(x.sum(axis=0))
+                axis, _ = _lin.data
+                if axis is None:
+                    return sp.csr_matrix(x.sum(axis=0))
+                else:
+                    shape = _lin.args[0].shape
+                    n = x.shape[-1]
+                    if isinstance(axis, tuple):
+                        d = np.prod([shape[i] for i in axis], dtype=int)
+                    else:
+                        d = shape[axis]
+                    x = x.toarray().reshape((shape)+(n,), order='F').sum(axis=axis)
+                    return sp.csr_matrix(x.reshape((n//d, n), order='F'))
             else:
                 m = x.shape[0] // p
                 return (sp.kron(sp.eye(p, format="csc"), np.ones(m)) @ x).tocsc()
