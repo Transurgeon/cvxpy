@@ -1572,7 +1572,7 @@ class TestND_Expressions():
         assert np.allclose(expr.value, y)
 
     def test_nd_matmul(self) -> None:
-        A = (1+np.arange(6)).reshape(3,2)
+        A = (1+np.arange(10)).reshape(5,2)
         expr = self.x
         prob = cp.Problem(self.obj, [A @ expr == A @ self.target])
         prob.solve(canon_backend=s.NUMPY_CANON_BACKEND)
@@ -1594,15 +1594,19 @@ class TestND_Expressions():
         assert np.allclose(expr.value, target)
 
     def test_nd_matmul_3(self) -> None:
-        A = (1+np.arange(9)).reshape(3,3)
-        expr = cp.Variable((3,3,5))
-        target = (1+np.arange(45)).reshape(3,3,5)
+        A = (1+np.arange(3)).reshape(1,3)
+        expr = cp.Variable((2,3,1))
+        target = (1+np.arange(6)).reshape(2,3,1)
         prob = cp.Problem(self.obj, [A @ expr == A @ target])
         prob.solve(canon_backend=s.NUMPY_CANON_BACKEND)
         assert np.allclose(expr.value, target)
 
     def test_nd_rmul_2(self) -> None:
-        pass
+        A = (1+np.arange(10)).reshape(2,5)
+        expr = self.x
+        prob = cp.Problem(self.obj, [expr @ A == self.target @ A])
+        prob.solve(canon_backend=s.NUMPY_CANON_BACKEND)
+        assert np.allclose(expr.value, self.target)
 
     @given(shapes=mutually_broadcastable_shapes(signature=np.matmul.signature))
     def test_nd_matmul_4(self, shapes) -> None:
@@ -1613,3 +1617,20 @@ class TestND_Expressions():
         prob = cp.Problem(self.obj, [A @ expr == A @ target])
         prob.solve(canon_backend=s.NUMPY_CANON_BACKEND)
         assert np.allclose(expr.value, target)
+
+    def test_nd_rmul_3(self) -> None:
+        A = (1+np.arange(9)).reshape(3,3)
+        expr = cp.Variable((3,5,3))
+        target = (1+np.arange(45)).reshape(3,5,3)
+        prob = cp.Problem(self.obj, [expr @ A == target @ A])
+        prob.solve(canon_backend=s.NUMPY_CANON_BACKEND)
+        assert np.allclose(expr.value, target)
+
+    def test_nd_mul(self) -> None:
+        A = np.ones(shape=(1,3))
+        expr = cp.Variable((3,1))
+        target = np.arange(3).reshape(3,1)
+        prob = cp.Problem(self.obj, [A @ expr == A @ target])
+        prob.solve(canon_backend=s.NUMPY_CANON_BACKEND)
+        assert np.allclose(expr.value, target)
+        

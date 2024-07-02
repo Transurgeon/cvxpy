@@ -266,7 +266,7 @@ class PythonCanonBackend(CanonBackend):
         """
         # Fast path for constant data to prevent reshape into column vector.
         constants = {"scalar_const", "dense_const", "sparse_const"}
-        if not column and lin_op.type in constants and len(lin_op.shape) == 2:
+        if not column and lin_op.type in constants and len(lin_op.shape) >= 2:
             constant_data = self.get_constant_data_from_const(lin_op)
             return constant_data, True
 
