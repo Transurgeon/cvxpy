@@ -130,17 +130,19 @@ class Leaf(expression.Expression):
                            'integer':  integer, 'sparsity': sparsity, 'bounds': bounds}
 
         if boolean:
-            self.boolean_idx = boolean if not isinstance(boolean, bool) else list(
-                np.ndindex(max(shape, (1,))))
+            self.boolean_idx = boolean if not isinstance(boolean, bool) else set(
+                                                    np.ndindex(max(shape, (1,))))
         else:
-            self.boolean_idx = []
+            self.boolean_idx = {}
 
         if integer:
-            self.integer_idx = integer if not isinstance(integer, bool) else list(
-                np.ndindex(max(shape, (1,))))
+            self.integer_idx = integer if not isinstance(integer, bool) else set(
+                                                    np.ndindex(max(shape, (1,))))
         else:
-            self.integer_idx = []
-
+            self.integer_idx = {}
+        if sparsity:
+            self.sparsity = sparsity
+        """
         # Only one attribute be True (except can be boolean and integer).
         true_attr = sum(1 for k, v in self.attributes.items() if v)
         # HACK we should remove this feature or allow multiple attributes in general.
@@ -149,16 +151,15 @@ class Leaf(expression.Expression):
         if true_attr > 1:
             raise ValueError("Cannot set more than one special attribute in %s."
                              % self.__class__.__name__)
-
+        """
         if value is not None:
             self.value = value
-
         self.args = []
-
         self.bounds = bounds
 
     def _get_attr_str(self) -> str:
-        """Get a string representing the attributes.
+        """
+        Get a string representing the attributes.
         """
         attr_str = ""
         for attr, val in self.attributes.items():
@@ -418,6 +419,8 @@ class Leaf(expression.Expression):
                     return val
                 w[bad] = 0
             return (V * w).dot(V.T)
+        elif self.attributes['sparsity']:
+            return np.where(val[self.sparsity], val, 0)
         else:
             return val
 
