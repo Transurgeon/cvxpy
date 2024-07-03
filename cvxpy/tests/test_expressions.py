@@ -20,7 +20,7 @@ import numpy as np
 import pytest
 import scipy.sparse as sp
 from hypothesis import given
-from hypothesis.extra.numpy import integer_array_indices
+from hypothesis.extra.numpy import basic_indices, integer_array_indices
 
 import cvxpy as cp
 import cvxpy.interface.matrix_utilities as intf
@@ -83,10 +83,6 @@ class TestExpressions(BaseTest):
             Variable((2, 2), diag=True, symmetric=True)
         self.assertEqual(str(cm.exception),
                          "Cannot set more than one special attribute in Variable.")
-
-        with self.assertRaises(Exception) as cm:
-            Variable((2, 0))
-        self.assertEqual(str(cm.exception), "Invalid dimensions (2, 0).")
 
         with self.assertRaises(Exception) as cm:
             Variable((2, .5))
@@ -1579,16 +1575,6 @@ class TestND_Expressions():
         prob.solve(canon_backend=cp.SCIPY_CANON_BACKEND)
         assert np.allclose(expr.value, y)
 
-    """
-    @pytest.mark.parametrize("axis", [(0),(1),(2)])
-    def test_nd_max(self, axis) -> None:
-        expr = cp.max(self.x, axis=axis, keepdims=True)
-        y = self.target.min(axis=axis, keepdims=True)
-        prob = cp.Problem(self.obj, [expr <= y])
-        prob.solve(canon_backend=cp.SCIPY_CANON_BACKEND)
-        assert np.allclose(expr.value, y)
-    """
-
     @given(integer_array_indices(shape=(2,2,2)))
     def test_nd_index(self, s) -> None:
         expr = self.x[s]
@@ -1597,5 +1583,19 @@ class TestND_Expressions():
         prob.solve(canon_backend=cp.SCIPY_CANON_BACKEND)
         assert np.allclose(expr.value, y)
 
+    @given(axis=basic_indices(shape=(2,2,2), allow_newaxis=True))
+    def test_nd__weird_index(self, axis) -> None:
+        expr = self.x[axis]
+        y = self.target[axis]
+        prob = cp.Problem(self.obj, [expr == y])
+        prob.solve(canon_backend=cp.SCIPY_CANON_BACKEND)
+        assert np.allclose(expr.value, y)
 
-        # self.x[..., None]
+    @given(axis=integer_array_indices(shape=(24,3,2)))
+    def test_nd_big_index(self, axis) -> None:
+        in_shape = (24,3,2)
+        expr = cp.Variable(shape=in_shape)[axis]
+        y = np.ones(in_shape)[axis]
+        prob = cp.Problem(self.obj, [expr == y])
+        prob.solve(canon_backend=cp.SCIPY_CANON_BACKEND)
+        assert np.allclose(expr.value, y)

@@ -261,19 +261,22 @@ class ConicSolver(Solver):
             # this is equivalent to but _much_ faster than:
             #    restruct_mat_rep = sp.block_diag([restruct_mat]*(problem.x.size + 1))
             #    restruct_A = restruct_mat_rep * problem.A
-            unspecified, remainder = divmod(problem.A.shape[0] *
-                                            problem.A.shape[1],
-                                            restruct_mat.shape[1])
-            reshaped_A = problem.A.reshape(restruct_mat.shape[1],
-                                           unspecified, order='F').tocsr()
-            restructured_A = restruct_mat(reshaped_A).tocoo()
-            # Because of a bug in scipy versions <  1.20, `reshape`
-            # can overflow if indices are int32s.
-            restructured_A.row = restructured_A.row.astype(np.int64)
-            restructured_A.col = restructured_A.col.astype(np.int64)
-            restructured_A = restructured_A.reshape(
-                np.int64(restruct_mat.shape[0]) * (np.int64(problem.x.size) + 1),
-                problem.A.shape[1], order='F')
+            if restruct_mat.shape[1] == 0:
+                restructured_A = problem.A
+            else:
+                unspecified, remainder = divmod(problem.A.shape[0] *
+                                                problem.A.shape[1],
+                                                restruct_mat.shape[1])
+                reshaped_A = problem.A.reshape(restruct_mat.shape[1],
+                                            unspecified, order='F').tocsr()
+                restructured_A = restruct_mat(reshaped_A).tocoo()
+                # Because of a bug in scipy versions <  1.20, `reshape`
+                # can overflow if indices are int32s.
+                restructured_A.row = restructured_A.row.astype(np.int64)
+                restructured_A.col = restructured_A.col.astype(np.int64)
+                restructured_A = restructured_A.reshape(
+                    np.int64(restruct_mat.shape[0]) * (np.int64(problem.x.size) + 1),
+                    problem.A.shape[1], order='F')
         else:
             restructured_A = problem.A
         new_param_cone_prog = ParamConeProg(
