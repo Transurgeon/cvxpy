@@ -60,4 +60,5 @@ tags
 # Things specific to this project
 cvxpy/version.py
 
-.hypothesis
+# Hypothesis testing
+.hypothesis/
