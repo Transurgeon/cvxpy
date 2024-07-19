@@ -227,7 +227,7 @@ class PythonCanonBackend(CanonBackend):
         # Leaf nodes
         if lin_op.type == "variable":
             assert isinstance(lin_op.data, int)
-            assert s.ALLOW_ND_EXPR or len(lin_op.shape) in {0, 1, 2}
+        assert s.ALLOW_ND_EXPR or len(lin_op.shape) in {0, 1, 2}
             variable_tensor = self.get_variable_tensor(lin_op.shape, lin_op.data)
             return empty_view.create_new_tensor_view({lin_op.data}, variable_tensor,
                                                      is_parameter_free=True)
@@ -265,7 +265,7 @@ class PythonCanonBackend(CanonBackend):
         """
         # Fast path for constant data to prevent reshape into column vector.
         constants = {"scalar_const", "dense_const", "sparse_const"}
-        if not column and lin_op.type in constants and len(lin_op.shape) == 2:
+        if not column and lin_op.type in constants and len(lin_op.shape) >= 2:
             constant_data = self.get_constant_data_from_const(lin_op)
             return constant_data, True
 
@@ -276,7 +276,7 @@ class PythonCanonBackend(CanonBackend):
             # constant_view has the data stored in column format.
             # Some operations (like mul) do not require column format, so we need to reshape
             # according to lin_op.shape.
-            lin_op_shape = lin_op.shape if len(lin_op.shape) == 2 else [1, lin_op.shape[0]]
+            lin_op_shape = lin_op.shape if len(lin_op.shape) >= 2 else [1, lin_op.shape[0]]
             constant_data = self.reshape_constant_data(constant_data, lin_op_shape)
 
         data_to_return = constant_data[Constant.ID.value] if constant_view.is_parameter_free \
@@ -718,6 +718,8 @@ class NumPyCanonBackend(PythonCanonBackend):
             assert isinstance(lhs, np.ndarray)
             reps = view.rows // lhs.shape[-1]
             stacked_lhs = np.kron(np.eye(reps), lhs)
+            if lin.shape and len(lin.shape) > 2:
+                stacked_lhs = np.kron(np.kron(np.eye(lin.shape[-1]), lhs), np.eye(lin.shape[0]))
 
             def func(x):
                 return stacked_lhs @ x

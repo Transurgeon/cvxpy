@@ -1300,10 +1300,6 @@ class TestExpressions(BaseTest):
 
         col_scale = Variable(n)
 
-        with self.assertRaises(ValueError) as cm:
-            cp.multiply(A, col_scale)
-        self.assertEqual(str(cm.exception), "Cannot broadcast dimensions  (3, 4) (4,)")
-
         col_scale = Variable([1, n])
         C = cp.multiply(A, col_scale)
         self.assertEqual(C.shape, (m, n))
@@ -1331,10 +1327,6 @@ class TestExpressions(BaseTest):
         A = np.random.rand(m, n)
 
         col_scale = Variable(n)
-
-        with self.assertRaises(ValueError) as cm:
-            A + col_scale
-        self.assertEqual(str(cm.exception), "Cannot broadcast dimensions  (3, 4) (4,)")
 
         col_scale = Variable([1, n])
         C = A + col_scale
@@ -1578,7 +1570,70 @@ class TestND_Expressions():
         prob = cp.Problem(self.obj, [expr == y])
         prob.solve(canon_backend=cp.SCIPY_CANON_BACKEND)
         assert np.allclose(expr.value, y)
-    
+
+    def test_nd_matmul(self) -> None:
+        A = (1+np.arange(10)).reshape(5,2)
+        expr = self.x
+        prob = cp.Problem(self.obj, [A @ expr == A @ self.target])
+        prob.solve(canon_backend=s.NUMPY_CANON_BACKEND)
+        assert np.allclose(expr.value, self.target)
+
+    def test_nd_rmul(self) -> None:
+        A = (1+np.arange(4)).reshape(2,2)
+        expr = self.x
+        prob = cp.Problem(self.obj, [expr @ A == self.target @ A])
+        prob.solve(canon_backend=s.NUMPY_CANON_BACKEND)
+        assert np.allclose(expr.value, self.target)
+
+    def test_nd_matmul_2(self) -> None:
+        A = (1+np.arange(6)).reshape(3,2)
+        expr = cp.Variable((3,2,5)) + cp.Constant(np.zeros((3,2,5)))
+        target = (1+np.arange(30)).reshape(3,2,5)
+        prob = cp.Problem(self.obj, [A @ expr == A @ target])
+        prob.solve(canon_backend=s.NUMPY_CANON_BACKEND)
+        assert np.allclose(expr.value, target)
+
+    def test_nd_matmul_3(self) -> None:
+        A = (1+np.arange(3)).reshape(1,3)
+        expr = cp.Variable((2,3,1))
+        target = (1+np.arange(6)).reshape(2,3,1)
+        prob = cp.Problem(self.obj, [A @ expr == A @ target])
+        prob.solve(canon_backend=s.NUMPY_CANON_BACKEND)
+        assert np.allclose(expr.value, target)
+
+    def test_nd_rmul_2(self) -> None:
+        A = (1+np.arange(10)).reshape(2,5)
+        expr = self.x
+        prob = cp.Problem(self.obj, [expr @ A == self.target @ A])
+        prob.solve(canon_backend=s.NUMPY_CANON_BACKEND)
+        assert np.allclose(expr.value, self.target)
+
+    @given(shapes=mutually_broadcastable_shapes(signature=np.matmul.signature))
+    def test_nd_matmul_4(self, shapes) -> None:
+        lhs_shape, rhs_shape = shapes.input_shapes
+        A = (1+np.arange(np.prod(lhs_shape, dtype=int))).reshape(lhs_shape)
+        expr = cp.Variable(rhs_shape)
+        target = (1+np.arange(np.prod(rhs_shape, dtype=int))).reshape(rhs_shape)
+        prob = cp.Problem(self.obj, [A @ expr == A @ target])
+        prob.solve(canon_backend=s.NUMPY_CANON_BACKEND)
+        assert np.allclose(expr.value, target)
+
+    def test_nd_rmul_3(self) -> None:
+        A = (1+np.arange(9)).reshape(3,3)
+        expr = cp.Variable((3,5,3))
+        target = (1+np.arange(45)).reshape(3,5,3)
+        prob = cp.Problem(self.obj, [expr @ A == target @ A])
+        prob.solve(canon_backend=s.NUMPY_CANON_BACKEND)
+        assert np.allclose(expr.value, target)
+
+    def test_nd_mul(self) -> None:
+        A = np.ones(shape=(1,3))
+        expr = cp.Variable((3,1))
+        target = np.arange(3).reshape(3,1)
+        prob = cp.Problem(self.obj, [A @ expr == A @ target])
+        prob.solve(canon_backend=s.NUMPY_CANON_BACKEND)
+        assert np.allclose(expr.value, target)
+        
     @given(integer_array_indices(shape=(2,2,2)))
     def test_nd_integer_index(self, s) -> None:
         expr = self.x[s]

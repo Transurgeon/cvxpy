@@ -17,6 +17,8 @@ from functools import reduce
 from operator import mul
 from typing import List, Tuple
 
+import numpy as np
+
 
 def squeezed(shape: Tuple[int, ...]) -> Tuple[int, ...]:
     return tuple(dim for dim in shape if dim != 1)
@@ -43,28 +45,7 @@ def sum_shapes(shapes: List[Tuple[int, ...]]) -> Tuple[int, ...]:
     ValueError
         If the shapes are not compatible.
     """
-    shape = shapes[0]
-    for t in shapes[1:]:
-        # Only allow broadcasting for 0D arrays or summation of scalars.
-        if shape != t and len(squeezed(shape)) != 0 and len(squeezed(t)) != 0:
-            raise ValueError(
-                "Cannot broadcast dimensions " +
-                len(shapes)*" %s" % tuple(shapes))
-
-        longer = shape if len(shape) >= len(t) else t
-        shorter = shape if len(shape) < len(t) else t
-        offset = len(longer) - len(shorter)
-        prefix = list(longer[:offset])
-        suffix = []
-        for d1, d2 in zip(reversed(longer[offset:]), reversed(shorter)):
-            if d1 != d2 and not (d1 == 1 or d2 == 1):
-                raise ValueError(
-                    "Incompatible dimensions" +
-                    len(shapes)*" %s" % tuple(shapes))
-            new_dim = d1 if d1 >= d2 else d2
-            suffix = [new_dim] + suffix
-        shape = tuple(prefix + suffix)
-    return tuple(shape)
+    return np.broadcast_shapes(*shapes)
 
 
 def mul_shapes_promote(
@@ -98,23 +79,23 @@ def mul_shapes_promote(
     """
     if not lh_shape or not rh_shape:
         raise ValueError("Multiplication by scalars is not permitted.")
+    # Promote 1D shapes to 2D
+    lh_shape = (1,) + lh_shape if len(lh_shape) == 1 else lh_shape
+    rh_shape = rh_shape + (1,) if len(rh_shape) == 1 else rh_shape
 
-    if len(lh_shape) == 1:
-        lh_shape = (1,) + lh_shape
-    if len(rh_shape) == 1:
-        rh_shape = rh_shape + (1,)
+    if lh_shape[-1] != rh_shape[-2]:
+        raise ValueError("Incompatible dimensions %s %s" % (lh_shape, rh_shape))
 
-    lh_mat_shape = lh_shape[-2:]
-    rh_mat_shape = rh_shape[-2:]
-    if lh_mat_shape[1] != rh_mat_shape[0]:
-        raise ValueError("Incompatible dimensions %s %s" % (
-            lh_shape, rh_shape))
-    if lh_shape[:-2] != rh_shape[:-2]:
-        raise ValueError("Incompatible dimensions %s %s" % (
-            lh_shape, rh_shape))
-    return (lh_shape, rh_shape,
-            tuple(list(lh_shape[:-2]) + [lh_mat_shape[0]] + [rh_mat_shape[1]]))
-
+    # Calculate resulting shape for higher-dimensional arrays
+    if len(lh_shape) > 2 or len(rh_shape) > 2:
+        try:
+            outer_dims = np.broadcast_shapes(lh_shape[:-2], rh_shape[:-2])
+        except ValueError:
+            raise ValueError("Incompatible dimensions %s %s" % (lh_shape, rh_shape))
+        shape = outer_dims + (lh_shape[-2], rh_shape[-1])
+    else:
+        shape = (lh_shape[-2], rh_shape[-1])
+    return (lh_shape, rh_shape, shape)
 
 def mul_shapes(lh_shape: Tuple[int, ...], rh_shape: Tuple[int, ...]) -> Tuple[int, ...]:
     """Give the shape resulting from multiplying two shapes.
@@ -143,11 +124,40 @@ def mul_shapes(lh_shape: Tuple[int, ...], rh_shape: Tuple[int, ...]) -> Tuple[in
     rh_old = rh_shape
     lh_shape, rh_shape, shape = mul_shapes_promote(lh_shape, rh_shape)
     if lh_shape != lh_old:
-        shape = shape[1:]
+        shape = shape[:-2] + (shape[-1],)
     if rh_shape != rh_old:
         shape = shape[:-1]
     return shape
 
+    original_lh_dim = len(lh_shape)
+    original_rh_dim = len(rh_shape)
+
+    # Promote 1D lh_shape to 2D by prepending a 1
+    if original_lh_dim == 1:
+        lh_shape = (1,) + lh_shape
+
+    # Promote 1D rh_shape to 2D by appending a 1
+    if original_rh_dim == 1:
+        rh_shape = rh_shape + (1,)
+
+    # Check for compatibility of inner dimensions
+    if lh_shape[-1] != rh_shape[-2]:
+        raise ValueError("Inner dimensions of matrices do not match for matrix multiplication.")
+
+    # Calculate resulting shape for higher-dimensional arrays
+    if len(lh_shape) > 2 or len(rh_shape) > 2:
+        broadcasted_outer_dims = np.broadcast_shapes(lh_shape[:-2], rh_shape[:-2])
+        result_shape = broadcasted_outer_dims + (lh_shape[-2], rh_shape[-1])
+    else:
+        result_shape = (lh_shape[-2], rh_shape[-1])
+
+    # Adjust the result shape based on original dimensions
+    if original_lh_dim == 1:
+        result_shape = result_shape[1:]  # Remove the prepended 1 for lh_shape
+    if original_rh_dim == 1:
+        result_shape = result_shape[:-1]  # Remove the appended 1 for rh_shape
+
+    return result_shape
 
 def size_from_shape(shape) -> int:
     """ Compute the size of a given shape by multiplying the sizes of each axis.

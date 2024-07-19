@@ -1944,6 +1944,31 @@ class TestND_Backends:
         [[x211, x212],
         [x221, x222]]]
 
+        Multiplying with the constant from the right
+        [[1, 2],
+         [3, 4]],
+
+         we expect the output to be
+        [[[ x111 + 3 x112, 2 x111 + 4 x112],
+         [ x121 + 3 x122, 2 x121 + 4 x122]]
+
+        [[ x211 + 3 x212, 2 x211 + 4 x212],
+         [ x221 + 3 x222, 2 x221 + 4 x222]]]
+
+        i.e., when represented in the A matrix (again using column-major order):
+        x111 x211 x121 x221 x112 x212 x122 x222
+        [[1   0   0   0   3   0   0   0],
+         [0   1   0   0   0   3   0   0],
+         [0   0   1   0   0   0   3   0],
+         [0   0   0   1   0   0   0   3],
+         [2   0   0   0   4   0   0   0],
+         [0   2   0   0   0   4   0   0],
+         [0   0   2   0   0   0   4   0],
+         [0   0   0   2   0   0   0   4]]
+        """
+        
+    def test_nd_rmul(self, backend):
+        """
         x is represented as eye(8) in the A matrix (in column-major order), i.e.,
 
         x111 x211 x121 x221 x112 x212 x122 x222
@@ -1975,6 +2000,87 @@ class TestND_Backends:
         view_A = view.get_tensor_representation(0, 8)
         view_A = sp.coo_matrix((view_A.data, (view_A.row, view_A.col)), shape=(8, 8)).toarray()
         assert np.all(view_A == np.eye(8))
+
+        rhs = linOpHelper((2,2), type="dense_const", data=np.array([[1, 2], [3, 4]]))
+
+        rmul_lin_op = linOpHelper(data=rhs, args=[variable_lin_op])
+        out_view = backend.rmul(rmul_lin_op, view)
+        A = out_view.get_tensor_representation(0, 8)
+
+        # cast to numpy
+        A = sp.coo_matrix((A.data, (A.row, A.col)), shape=(8, 8)).toarray()
+        expected = np.array([[1, 0, 0, 0, 3, 0, 0, 0],
+                            [0, 1, 0, 0, 0, 3, 0, 0],
+                            [0, 0, 1, 0, 0, 0, 3, 0],
+                            [0, 0, 0, 1, 0, 0, 0, 3],
+                            [2, 0, 0, 0, 4, 0, 0, 0],
+                            [0, 2, 0, 0, 0, 4, 0, 0],
+                            [0, 0, 2, 0, 0, 0, 4, 0],
+                            [0, 0, 0, 2, 0, 0, 0, 4]])
+        assert np.all(A == expected)
+
+        # Note: view is edited in-place:
+        assert out_view.get_tensor_representation(0, 8) == view.get_tensor_representation(0, 8)
+
+    def test_nd_mul(self, backend):
+        """
+        define x = Variable((2,2,2)) with
+        [[[x111, x112],
+        [x121, x122]],
+
+        [[x211, x212],
+        [x221, x222]]]
+
+        Multiplying with the constant from the left
+        [[1, 2],
+         [3, 4]],
+
+         we expect the output to be
+        [[[ x111 + 2 x121, x112 + 2 x122],
+         [ 3 x111 + 4 x121, 3 x112 + 4 x122]]
+
+        [[ x211 + 2 x221, x212 + 2 x222],
+         [ 3 x211 + 4 x221, 3 x212 + 4 x222]]]
+
+        i.e., when represented in the A matrix (again using column-major order):
+        x111 x211 x121 x221 x112 x212 x122 x222
+        [[1   0   2   0   0   0   0   0],
+         [0   1   0   2   0   0   0   0],
+         [3   0   4   0   0   0   0   0],
+         [0   3   0   4   0   0   0   0],
+         [0   0   0   0   1   0   2   0],
+         [0   0   0   0   0   1   0   2],
+         [0   0   0   0   3   0   4   0],
+         [0   0   0   0   0   3   0   4]]
+        """
+        variable_lin_op = linOpHelper((2, 2, 2), type="variable", data=1)
+        view = backend.process_constraint(variable_lin_op, backend.get_empty_view())
+
+        # cast to numpy
+        view_A = view.get_tensor_representation(0, 8)
+        view_A = sp.coo_matrix((view_A.data, (view_A.row, view_A.col)), shape=(8, 8)).toarray()
+        assert np.all(view_A == np.eye(8))
+
+        lhs = linOpHelper((2, 2), type="dense_const", data=np.array([[1, 2], [3, 4]]))
+
+        mul_lin_op = linOpHelper(data=lhs, args=[variable_lin_op])
+        out_view = backend.mul(mul_lin_op, view)
+        A = out_view.get_tensor_representation(0, 8)
+
+        # cast to numpy
+        A = sp.coo_matrix((A.data, (A.row, A.col)), shape=(8, 8)).toarray()
+        expected = np.array([[1, 0, 2, 0, 0, 0, 0, 0],
+                            [0, 1, 0, 2, 0, 0, 0, 0],
+                            [3, 0, 4, 0, 0, 0, 0, 0],
+                            [0, 3, 0, 4, 0, 0, 0, 0],
+                            [0, 0, 0, 0, 1, 0, 2, 0],
+                            [0, 0, 0, 0, 0, 1, 0, 2],
+                            [0, 0, 0, 0, 3, 0, 4, 0],
+                            [0, 0, 0, 0, 0, 3, 0, 4]])
+        assert np.all(A == expected)
+
+        # Note: view is edited in-place:
+        assert out_view.get_tensor_representation(0, 8) == view.get_tensor_representation(0, 8)
 
         index_2d_lin_op = linOpHelper(data=[slice(0, 2, 1), slice(0, 1, 1), slice(0, 2, 1)],
                                       args=[variable_lin_op])

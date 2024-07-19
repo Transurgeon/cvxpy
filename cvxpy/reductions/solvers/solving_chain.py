@@ -390,7 +390,7 @@ def _get_canon_backend(problem, canon_backend):
     This function checks if the problem has expressions of dimension greater
     than 2, then raises a warning if the default backend is not specified or 
     raises an error if the backend is specified as 'CPP'.
-
+    
     Parameters
     ----------
     problem : Problem
