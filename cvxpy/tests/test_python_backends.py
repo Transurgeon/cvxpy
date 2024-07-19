@@ -1974,15 +1974,23 @@ class TestND_Backends:
         view_A = sp.coo_matrix((view_A.data, (view_A.row, view_A.col)), shape=(8, 8)).toarray()
         assert np.all(view_A == np.eye(8))
 
-        rhs = linOpHelper((2, 2, 2), type="variable", data=2)
+        rhs = linOpHelper((2,2), type="dense_const", data=np.array([[1, 2], [3, 4]]))
 
-        mul_lin_op = linOpHelper(data=rhs, args=[variable_lin_op])
-        out_view = backend.mul(mul_lin_op, view)
+        rmul_lin_op = linOpHelper(data=rhs, args=[variable_lin_op])
+        out_view = backend.rmul(rmul_lin_op, view)
         A = out_view.get_tensor_representation(0, 8)
 
         # cast to numpy
         A = sp.coo_matrix((A.data, (A.row, A.col)), shape=(8, 8)).toarray()
-        assert np.all(A == np.eye(8))
+        expected = np.array([[1, 0, 0, 0, 3, 0, 0, 0],
+                            [0, 1, 0, 0, 0, 3, 0, 0],
+                            [0, 0, 1, 0, 0, 0, 3, 0],
+                            [0, 0, 0, 1, 0, 0, 0, 3],
+                            [2, 0, 0, 0, 4, 0, 0, 0],
+                            [0, 2, 0, 0, 0, 4, 0, 0],
+                            [0, 0, 2, 0, 0, 0, 4, 0],
+                            [0, 0, 0, 2, 0, 0, 0, 4]])
+        assert np.all(A == expected)
 
         # Note: view is edited in-place:
         assert out_view.get_tensor_representation(0, 8) == view.get_tensor_representation(0, 8)
@@ -2026,18 +2034,27 @@ class TestND_Backends:
         view_A = sp.coo_matrix((view_A.data, (view_A.row, view_A.col)), shape=(8, 8)).toarray()
         assert np.all(view_A == np.eye(8))
 
-        rhs = linOpHelper((2, 2, 2), type="variable", data=2)
+        lhs = linOpHelper((2, 2), type="dense_const", data=np.array([[1, 2], [3, 4]]))
 
-        mul_lin_op = linOpHelper(data=rhs, args=[variable_lin_op])
+        mul_lin_op = linOpHelper(data=lhs, args=[variable_lin_op])
         out_view = backend.mul(mul_lin_op, view)
         A = out_view.get_tensor_representation(0, 8)
 
         # cast to numpy
         A = sp.coo_matrix((A.data, (A.row, A.col)), shape=(8, 8)).toarray()
-        assert np.all(A == np.eye(8))
+        expected = np.array([[1, 0, 2, 0, 0, 0, 0, 0],
+                            [0, 1, 0, 2, 0, 0, 0, 0],
+                            [3, 0, 4, 0, 0, 0, 0, 0],
+                            [0, 3, 0, 4, 0, 0, 0, 0],
+                            [0, 0, 0, 0, 1, 0, 2, 0],
+                            [0, 0, 0, 0, 0, 1, 0, 2],
+                            [0, 0, 0, 0, 3, 0, 4, 0],
+                            [0, 0, 0, 0, 0, 3, 0, 4]])
+        assert np.all(A == expected)
 
         # Note: view is edited in-place:
         assert out_view.get_tensor_representation(0, 8) == view.get_tensor_representation(0, 8)
+
 
 
 class TestNumPyBackend:
