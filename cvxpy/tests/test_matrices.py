@@ -13,7 +13,6 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-import sys
 import unittest
 from typing import Tuple
 
@@ -24,8 +23,6 @@ import cvxpy.interface.matrix_utilities as intf
 from cvxpy.constraints.constraint import Constraint
 from cvxpy.expressions.expression import Expression
 from cvxpy.expressions.variable import Variable
-
-PY35 = sys.version_info >= (3, 5)
 
 
 class TestMatrices(unittest.TestCase):
@@ -70,27 +67,6 @@ class TestMatrices(unittest.TestCase):
         self.assertExpression(A << self.A, (2, 2))
         self.assertExpression(A >> self.A, (2, 2))
 
-    # Test numpy matrices
-    def test_numpy_matrices(self) -> None:
-        # Vector
-        v = numpy.arange(2)
-        self.assertExpression(self.x + v, (2,))
-        self.assertExpression(v + v + self.x, (2,))
-        self.assertExpression(self.x - v, (2,))
-        self.assertExpression(v - v - self.x, (2,))
-        self.assertExpression(self.x <= v, (2,))
-        self.assertExpression(v <= self.x, (2,))
-        self.assertExpression(self.x == v, (2,))
-        self.assertExpression(v == self.x, (2,))
-        # Matrix
-        A = numpy.arange(8).reshape((4, 2))
-        self.assertExpression(A @ self.x, (4,))
-        self.assertExpression((A.T.dot(A)) @ self.x, (2,))
-        # PSD inequalities.
-        A = numpy.ones((2, 2))
-        self.assertExpression(A << self.A, (2, 2))
-        self.assertExpression(A >> self.A, (2, 2))
-
     def test_numpy_scalars(self) -> None:
         """Test numpy scalars."""
         v = numpy.float64(2.0)
@@ -130,9 +106,4 @@ class TestMatrices(unittest.TestCase):
         self.assertExpression(B @ var, (4, 2))
         self.assertExpression(var - A, (4, 2))
         self.assertExpression(A - A - var, (4, 2))
-        if PY35:
-            self.assertExpression(var.__rmatmul__(B), (4, 2))
-        # self.assertExpression(var <= A, (4, 2))
-        # self.assertExpression(A <= var, (4, 2))
-        # self.assertExpression(var == A, (4, 2))
-        # self.assertExpression(A == var, (4, 2))
+        self.assertExpression(var.__rmatmul__(B), (4, 2))
