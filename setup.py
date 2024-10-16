@@ -5,7 +5,6 @@ import platform
 import sys
 import sysconfig
 
-import setup.extensions as setup_extensions
 import setup.versioning as setup_versioning
 
 # BEFORE importing setuptools, remove MANIFEST. Otherwise it may not be
@@ -52,7 +51,7 @@ if sys.platform == 'darwin':
 
 setup_versioning.write_version_py()
 VERSION = setup_versioning.VERSION
-extensions = [setup_extensions.cvxcore, setup_extensions.sparsecholesky]
+extensions = []
 
 setup(
     name="cvxpy",

@@ -18,6 +18,7 @@ from __future__ import annotations
 import numpy as np
 
 import cvxpy.settings as s
+from cvxpy import canonInterface
 from cvxpy.constraints import (
     PSD,
     SOC,
@@ -28,7 +29,6 @@ from cvxpy.constraints import (
     NonPos,
     Zero,
 )
-from cvxpy.cvxcore.python import canonInterface
 from cvxpy.expressions.variable import Variable
 from cvxpy.problems.objective import Minimize
 from cvxpy.problems.param_prob import ParamProb
