@@ -22,7 +22,7 @@ from typing import List
 import numpy as np
 import scipy.sparse as sp
 
-from cvxpy.cvxcore.python import canonInterface
+from cvxpy import canonInterface
 from cvxpy.lin_ops.canon_backend import TensorRepresentation
 from cvxpy.lin_ops.lin_op import NO_OP, LinOp
 from cvxpy.reductions.inverse_data import InverseData
