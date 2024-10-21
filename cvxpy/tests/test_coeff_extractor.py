@@ -29,7 +29,7 @@ def coeff_extractor():
         param_to_size={-1: 1, 2: 1, 3: 1},
         param_id_map={2: 0, 3: 1, -1: 2},
     )
-    backend = cp.CPP_CANON_BACKEND
+    backend = cp.SCIPY_CANON_BACKEND
     return CoeffExtractor(inverset_data, backend)
 
 
