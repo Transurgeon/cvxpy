@@ -59,12 +59,21 @@ or a conda environment.
 
         CVXPY has the following dependencies:
 
+<<<<<<< HEAD
+         * Python >= 3.7
+         * `OSQP`_ >= 0.6.2
+         * `CLARABEL`_ >= 0.6.0
+         * `SCS`_ >= 3.0
+         * `NumPy`_ >= 1.15
+         * `SciPy`_ >= 1.1.0
+=======
         * Python >= 3.9
         * `OSQP`_ >= 0.6.2
         * `CLARABEL`_ >= 0.6.0
         * `SCS`_ >= 3.0
         * `NumPy`_ >= 1.20.0
         * `SciPy`_ >= 1.6.0
+>>>>>>> origin/master
 
         All required packages are installed automatically alongside CVXPY.
 

@@ -139,12 +139,20 @@ website to use a modern theme based on Sphinx Immaterial.
 .. toctree::
    :hidden:
 
+<<<<<<< HEAD
+   functions/index
+=======
    contributing/index
+>>>>>>> origin/master
 
 .. toctree::
    :hidden:
 
+<<<<<<< HEAD
+   API Documentation <api_reference/cvxpy>
+=======
    Changelog <updates/index>
+>>>>>>> origin/master
 
 .. toctree::
    :maxdepth: 1
@@ -155,5 +163,34 @@ website to use a modern theme based on Sphinx Immaterial.
 .. toctree::
    :hidden:
 
+<<<<<<< HEAD
+   contributing/index
+
+.. toctree::
+   :hidden:
+
+   related_projects/index
+
+.. toctree::
+   :hidden:
+
+   updates/index
+
+.. toctree::
+   :hidden:
+
+   short_course/index
+
+.. toctree::
+   :hidden:
+
+   citing/index
+
+.. toctree::
+   :hidden:
+
+   license/index
+=======
    resources/index
 
+>>>>>>> origin/master

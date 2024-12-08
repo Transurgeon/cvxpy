@@ -153,6 +153,11 @@ html_sidebars = {
 # further.  For a list of options available for each theme, see the
 # documentation.
 html_theme_options = {
+<<<<<<< HEAD
+    'navigation_depth': 4,
+    'style_external_links': True,
+=======
+>>>>>>> origin/master
     "palette": {"scheme": "default"},
 
     "features": [
@@ -185,6 +190,10 @@ html_theme_options = {
     "site_url": "https://www.cvxpy.org/",
     "repo_url": "https://github.com/cvxpy/cvxpy/",
     "repo_name": "CVXPY",
+<<<<<<< HEAD
+    "repo_type": "github",
+=======
+>>>>>>> origin/master
     "icon": {
         "repo": "fontawesome/brands/github",
     },
@@ -197,11 +206,29 @@ html_theme_options = {
     "version_dropdown": True,
     "version_info": [
         {
+<<<<<<< HEAD
+            "version": "latest",
+=======
             "version": "https://www.cvxpy.org",
+>>>>>>> origin/master
             "title": "latest",
             "aliases": [],
         },
         {
+<<<<<<< HEAD
+            "version": "https://www.cvxpy.org/version/1.3/",
+            "title": "1.3",
+            "aliases": [],
+        },
+        {
+            "version": "https://www.cvxpy.org/version/1.2/",
+            "title": "1.2",
+            "aliases": [],
+        },
+        {
+            "version": "https://www.cvxpy.org/version/1.1/",
+            "title": "1.1",
+=======
             "version": "https://www.cvxpy.org/version/1.6",
             "title": "1.6",
             "aliases": [],
@@ -214,6 +241,7 @@ html_theme_options = {
         {
             "version": "https://www.cvxpy.org/version/1.4",
             "title": "1.4",
+>>>>>>> origin/master
             "aliases": [],
         },
     ],
@@ -256,7 +284,21 @@ html_favicon = "_static/favicon.ico"
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ['_static']
+<<<<<<< HEAD
+
+html_css_files = [
+    'css/extra_css.css',
+    'https://cdn.datatables.net/1.10.23/css/jquery.dataTables.min.css',
+]
+
+html_js_files = [
+    'https://cdn.datatables.net/1.10.23/js/jquery.dataTables.min.js',
+    'main.js',
+]
+
+=======
 html_css_files = ['css/styling.css']
+>>>>>>> origin/master
 
 # If not '', a 'Last updated on:' timestamp is inserted at every page bottom,
 # using the given strftime format.
