@@ -330,6 +330,132 @@ tutorial <functions>` for more information.
      - |affine| log-log affine
      - |incr| incr.
 
+<<<<<<< HEAD
+=======
+   * - :ref:`harmonic_mean(x) <harmonic-mean>`
+     - :math:`\frac{n}{\frac{1}{x_1} + \cdots + \frac{1}{x_n}}`
+     - :math:`x \in \mathbf{R}^n_{+}`
+     - |concave| log-log concave
+     - |incr| incr.
+
+   * - :ref:`max(X) <max>`
+
+     - :math:`\max_{ij}\left\{ X_{ij}\right\}`
+     - :math:`X \in\mathbf{R}^{m \times n}_{++}`
+     - |convex| log-log convex
+     - |incr| incr.
+
+   * - :ref:`min(X) <min>`
+
+     - :math:`\min_{ij}\left\{ X_{ij}\right\}`
+     - :math:`X \in\mathbf{R}^{m \times n}_{++}`
+     - |concave| log-log concave
+     - |incr| incr.
+
+   * - :ref:`norm(x) <norm>`
+
+       norm(x, 2)
+
+     - :math:`\sqrt{\sum_{i} \lvert x_{i} \rvert^2 }`
+     - :math:`X \in\mathbf{R}^{n}_{++}`
+     - |convex| log-log convex
+     - |incr| incr.
+
+   * - :ref:`norm(X, "fro") <norm>`
+     - :math:`\sqrt{\sum_{ij}X_{ij}^2 }`
+     - :math:`X \in\mathbf{R}^{m \times n}_{++}`
+     - |convex| log-log convex
+     - |incr| incr.
+
+   * - :ref:`norm(X, 1) <norm>`
+     - :math:`\sum_{ij}\lvert X_{ij} \rvert`
+     - :math:`X \in\mathbf{R}^{m \times n}_{++}`
+     - |convex| log-log convex
+     - |incr| incr.
+
+   * - :ref:`norm(X, "inf") <norm>`
+     - :math:`\max_{ij} \{\lvert X_{ij} \rvert\}`
+     - :math:`X \in\mathbf{R}^{m \times n}_{++}`
+     - |convex| log-log convex
+     - |incr| incr.
+
+   * - :ref:`pnorm(X, p) <pnorm_func>`
+
+       :math:`p \geq 1`
+
+       or ``p = 'inf'``
+     - :math:`\|X\|_p = \left(\sum_{ij} |X_{ij}|^p \right)^{1/p}`
+     - :math:`X \in \mathbf{R}^{m \times n}_{++}`
+     - |convex| log-log convex
+     - |incr| incr.
+
+   * - :ref:`pnorm(X, p) <pnorm_func>`
+
+       :math:`0 < p < 1`
+     - :math:`\|X\|_p = \left(\sum_{ij} X_{ij}^p \right)^{1/p}`
+     - :math:`X \in \mathbf{R}^{m \times n}_{++}`
+     - |convex| log-log convex
+     - |incr| incr.
+
+   * - :ref:`prod(X) <prod>`
+
+     - :math:`\prod_{ij}X_{ij}`
+     - :math:`X \in\mathbf{R}^{m \times n}_{++}`
+     - |affine| log-log affine
+     - |incr| incr.
+
+   * - :ref:`cumprod(X, axis=0) <cumprod>`
+
+     - cumulative product along given axis.
+     - :math:`X \in \mathbf{R}^{m \times n}`
+     - |affine| log-log affine
+     - |incr| incr.
+
+   * - :ref:`quad_form(x, P) <quad-form>`
+     - :math:`x^T P x`
+     - :math:`x \in \mathbf{R}^n`, :math:`P \in \mathbf{R}^{n \times n}_{++}`
+     - |convex| log-log convex
+     - |incr| incr.
+
+   * - :ref:`quad_over_lin(X, y) <quad-over-lin>`
+     - :math:`\left(\sum_{ij}X_{ij}^2\right)/y`
+     - :math:`x \in \mathbf{R}^n_{++}`
+
+       :math:`y > 0`
+     - |convex| log-log convex
+     - |incr| in :math:`X_{ij}`
+
+       |decr| decr. in :math:`y`
+
+   * - :ref:`sum(X) <sum>`
+
+     - :math:`\sum_{ij}X_{ij}`
+     - :math:`X \in\mathbf{R}^{m \times n}_{++}`
+     - |convex| log-log convex
+     - |incr| incr.
+
+   * - :ref:`sum_squares(X) <sum-squares>`
+
+     - :math:`\sum_{ij}X_{ij}^2`
+     - :math:`X \in\mathbf{R}^{m \times n}_{++}`
+     - |convex| log-log convex
+     - |incr| incr.
+
+   * - :ref:`trace(X) <trace>`
+
+     - :math:`\mathrm{tr}\left(X \right)`
+     - :math:`X \in\mathbf{R}^{n \times n}_{++}`
+     - |convex| log-log convex
+     - |incr| incr.
+
+   * - :ref:`pf_eigenvalue(X) <pf-eigenvalue>`
+
+     - spectral radius of :math:`X`
+     - :math:`X \in\mathbf{R}^{n \times n}_{++}`
+     - |convex| log-log convex
+     - |incr| incr.
+
+>>>>>>> origin/master
 Elementwise functions
 *********************
 

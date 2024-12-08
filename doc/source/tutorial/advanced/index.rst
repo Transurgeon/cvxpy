@@ -5,6 +5,44 @@ Advanced Features
 
 This section of the tutorial covers features of CVXPY intended for users with advanced knowledge of convex optimization. We recommend `Convex Optimization <https://www.stanford.edu/~boyd/cvxbook/>`_ by Boyd and Vandenberghe as a reference for any terms you are unfamiliar with.
 
+.. _n-dimensional:
+
+N-dimensional expressions
+-------------------------
+
+.. versionadded:: 1.6
+
+CVXPY now supports N-dimensional expressions. This allows one to define variables, parameters, and constants with arbitrary number of dimensions.
+This new feature enables users to model problems with multi-dimensional data in a more natural way.
+
+In the example below, we consider a problem where the goal is to optimize the usage of a resource across multiple locations, days, and hours.
+We are now able to easily form constraints on any combination of dimensions.
+
+.. code:: python
+    
+    # create a 3-dimensional variable (locations, days, hours)
+    x = cp.Variable((12, 10, 24))
+
+    constraints = [
+      cp.sum(x, axis=(0, 2)) <= 2000, # constrain the daily usage across all locations
+      x[:, :, :12] <= 100, # constrain the first 12 hours of each day at every location
+      x[:, 3, :] == 0,] # constrain the usage on the fourth day to be zero
+
+    obj = cp.Minimize(cp.sum_squares(x))
+    prob = cp.Problem(obj, constraints)
+    prob.solve()
+
+Please refer to NumPy's excellent `reference <https://numpy.org/doc/stable/reference/arrays.ndarray.html>`_ 
+on N-dimensional arrays and the `array API standard <https://data-apis.org/array-api/latest/API_specification/index.html>`_ for more details
+on how to manipulate N-dimensional arrays. Our goal is to match the NumPy API as closely as possible.
+
+.. warning::
+
+    N-dimensional support is still experimental and may not work with all CVXPY features.
+    If you encounter any issues or missing functionality, please report them on `GitHub issues <https://github.com/cvxpy/cvxpy/issues>`_.
+
+.. _dual-variables:
+
 Dual variables
 --------------
 
@@ -44,243 +82,7 @@ You can use CVXPY to find the optimal dual variables for a problem. When you cal
 
 The dual variable for ``x - y >= 1`` is 2. By complementarity this implies that ``x - y`` is 1, which we can see is true. The fact that the dual variable is non-zero also tells us that if we tighten ``x - y >= 1``, (i.e., increase the right-hand side), the optimal value of the problem will increase.
 
-.. _attributes:
-
-Attributes
-----------
-
-Variables and parameters can be created with attributes specifying additional properties.
-For example, ``Variable(nonneg=True)`` is a scalar variable constrained to be nonnegative.
-Similarly, ``Parameter(nonpos=True)`` is a scalar parameter constrained to be nonpositive.
-The full constructor for :py:class:`Leaf <cvxpy.expressions.leaf.Leaf>` (the parent class
-of :py:class:`Variable <cvxpy.expressions.variable.Variable>` and
-:py:class:`Parameter <cvxpy.expressions.constants.parameter.Parameter>`) is given below.
-
-.. function:: Leaf(shape=None, value=None, nonneg=False, nonpos=False, complex=False, imag=False, symmetric=False, diag=False, PSD=False, NSD=False, hermitian=False, boolean=False, integer=False, sparsity=None, pos=False, neg=False)
-
-    Creates a Leaf object (e.g., Variable or Parameter).
-    Only one attribute can be active (set to True).
-
-    :param shape: The variable dimensions (0D by default). Cannot be more than 2D.
-    :type shape: tuple or int
-    :param value: A value to assign to the variable.
-    :type value: numeric type
-    :param nonneg: Is the variable constrained to be nonnegative?
-    :type nonneg: bool
-    :param nonpos: Is the variable constrained to be nonpositive?
-    :type nonpos: bool
-    :param complex: Is the variable constrained to be complex-valued?
-    :type complex: bool
-    :param imag: Is the variable constrained to be imaginary?
-    :type imag: bool
-    :param symmetric: Is the variable constrained to be symmetric?
-    :type symmetric: bool
-    :param diag: Is the variable constrained to be diagonal?
-    :type diag: bool
-    :param PSD: Is the variable constrained to be symmetric positive semidefinite?
-    :type PSD: bool
-    :param NSD: Is the variable constrained to be symmetric negative semidefinite?
-    :type NSD: bool
-    :param hermitian: Is the variable constrained to be Hermitian?
-    :type hermitian: bool
-    :param boolean:
-        Is the variable boolean (i.e., 0 or 1)? True, which constrains
-        the entire variable to be boolean, False, or a list of
-        indices which should be constrained as boolean, where each
-        index is a tuple of length exactly equal to the
-        length of shape.
-    :type boolean: bool or list of tuple
-    :param integer: Is the variable integer? The semantics are the same as the boolean argument.
-    :type integer: bool or list of tuple
-    :param sparsity: Fixed sparsity pattern for the variable.
-    :type sparsity: list of tuplewith
-    :param pos: Is the variable constrained to be positive?
-    :type pos: bool
-    :param neg: Is the variable constrained to be negative?
-    :type neg: bool
-
-The ``value`` field of Variables and Parameters can be assigned a value after construction,
-but the assigned value must satisfy the object attributes.
-A Euclidean projection onto the set defined by the attributes is given by the
-:py:meth:`project <cvxpy.expressions.leaf.Leaf.project>` method.
-
-.. code:: python
-
-    p = Parameter(nonneg=True)
-    try:
-        p.value = -1
-    except Exception as e:
-        print(e)
-
-    print("Projection:", p.project(-1))
-
-::
-
-    Parameter value must be nonnegative.
-    Projection: 0.0
-
-A sensible idiom for assigning values to leaves is
-:py:meth:`leaf.value = leaf.project(val) <cvxpy.expressions.leaf.Leaf.project>`,
-ensuring that the assigned value satisfies the leaf's properties.
-A slightly more efficient variant is
-:py:meth:`leaf.project_and_assign(val) <cvxpy.expressions.leaf.Leaf.project_and_assign>`,
-which projects and assigns the value directly, without additionally checking
-that the value satisfies the leaf's properties.  In most cases ``project`` and
-checking that a value satisfies a leaf's properties are cheap operations (i.e.,
-:math:`O(n)`), but for symmetric positive semidefinite or negative semidefinite
-leaves, the operations compute an eigenvalue decomposition.
-
-Many attributes, such as nonnegativity and symmetry, can be easily specified with constraints.
-What is the advantage then of specifying attributes in a variable?
-The main benefit is that specifying attributes enables more fine-grained DCP analysis.
-For example, creating a variable ``x`` via ``x = Variable(nonpos=True)`` informs the DCP analyzer that ``x`` is nonpositive.
-Creating the variable ``x`` via ``x = Variable()`` and adding the constraint ``x >= 0`` separately does not provide any information
-about the sign of ``x`` to the DCP analyzer.
-
-One downside of using attributes over explicit constraints is that dual variables will not be recorded. Dual variable values
-are only recorded for explicit constraints.
-
-.. _semidefinite:
-
-Semidefinite matrices
-----------------------
-
-Many convex optimization problems involve constraining matrices to be positive or negative semidefinite (e.g., SDPs).
-You can do this in CVXPY in two ways.
-The first way is to use
-``Variable((n, n), PSD=True)`` to create an ``n`` by ``n`` variable constrained to be symmetric and positive semidefinite. For example,
-
-.. code:: python
-
-    # Creates a 100 by 100 positive semidefinite variable.
-    X = cp.Variable((100, 100), PSD=True)
-
-    # You can use X anywhere you would use
-    # a normal CVXPY variable.
-    obj = cp.Minimize(cp.norm(X) + cp.sum(X))
-
-The second way is to create a positive semidefinite cone constraint using the ``>>`` or ``<<`` operator.
-If ``X`` and ``Y`` are ``n`` by ``n`` variables,
-the constraint ``X >> Y`` means that :math:`z^T(X - Y)z \geq 0`, for all :math:`z \in \mathcal{R}^n`.
-In other words, :math:`(X - Y) + (X - Y)^T` is positive semidefinite.
-The constraint does not require that ``X`` and ``Y`` be symmetric.
-Both sides of a postive semidefinite cone constraint must be square matrices and affine.
-
-The following code shows how to constrain matrix expressions to be positive or negative
-semidefinite (but not necessarily symmetric).
-
-.. code:: python
-
-    # expr1 must be positive semidefinite.
-    constr1 = (expr1 >> 0)
-
-    # expr2 must be negative semidefinite.
-    constr2 = (expr2 << 0)
-
-To constrain a matrix expression to be symmetric, simply write
-
-.. code:: python
-
-    # expr must be symmetric.
-    constr = (expr == expr.T)
-
-You can also use ``Variable((n, n), symmetric=True)`` to create an ``n`` by ``n`` variable constrained to be symmetric.
-The difference between specifying that a variable is symmetric via attributes and adding the constraint ``X == X.T`` is that
-attributes are parsed for DCP information and a symmetric variable is defined over the (lower dimensional) vector space of symmetric matrices.
-
-.. _mip:
-
-Mixed-integer programs
-----------------------
-
-In mixed-integer programs, certain variables are constrained to be boolean (i.e., 0 or 1) or integer valued.
-You can construct mixed-integer programs by creating variables with the attribute that they have only boolean or integer valued entries:
-
-.. code:: python
-
-    # Creates a 10-vector constrained to have boolean valued entries.
-    x = cp.Variable(10, boolean=True)
-
-    # expr1 must be boolean valued.
-    constr1 = (expr1 == x)
-
-    # Creates a 5 by 7 matrix constrained to have integer valued entries.
-    Z = cp.Variable((5, 7), integer=True)
-
-    # expr2 must be integer valued.
-    constr2 = (expr2 == Z)
-
-CVXPY provides interfaces to many mixed-integer solvers, including open source and commercial solvers.
-For licensing reasons, CVXPY does not install any of the preferred solvers by default.
-
-The preferred open source mixed-integer solvers in CVXPY are GLPK_MI_, CBC_ and SCIP_. The CVXOPT_
-python package provides CVXPY with access to GLPK_MI; CVXOPT can be installed by running
-``pip install cvxopt`` in your command line or terminal. SCIP supports nonlinear models, but
-GLPK_MI and CBC do not.
-
-CVXPY comes with ECOS_BB -- an open source mixed-integer nonlinear solver -- by default. However
-ECOS_BB will not be called automatically; you must explicitly call ``prob.solve(solver='ECOS_BB')``
-if you want to use it (:ref:`changed in CVXPY 1.1.6 <changes116>`). This policy stems from the fact
-that there are recurring correctness issues with ECOS_BB. If you rely on this solver for some
-application then you need to be aware of the increased risks that come with using it.
-If you need to use an open-source mixed-integer nonlinear solver from CVXPY, then we recommend you install SCIP.
-
-If you need to solve a large mixed-integer problem quickly, or if you have a nonlinear mixed-integer
-model that is challenging for SCIP, then you will need to use a commercial solver such as CPLEX_,
-GUROBI_, XPRESS_, MOSEK_, or COPT_. Commercial solvers require licenses to run. CPLEX, GUROBI, and MOSEK
-provide free licenses to those
-in academia (both students and faculty), as well as trial versions to those outside academia.
-CPLEX Free Edition is available at no cost regardless of academic status, however it still requires
-online registration, and it's limited to problems with at most 1000 variables and 1000 constraints.
-XPRESS has a free community edition which does not require registration, however it is limited
-to problems where the sum of variables count and constraint count does not exceed 5000.
-COPT also has a free community edition that is limited to problems with at most 2000 variables 
-and 2000 constraints.
-
-.. note::
-   If you develop an open-source mixed-integer solver with a permissive license such
-   as Apache 2.0, and you're interested in incorporating your solver into CVXPY's default installation,
-   please reach out to us at our `GitHub issues <https://github.com/cvxpy/cvxpy/issues>`_. We are
-   particularly interested in incorporating a simple mixed-integer SOCP solver.
-
-Complex valued expressions
---------------------------
-
-By default variables and parameters are real valued.
-Complex valued variables and parameters can be created by setting the attribute ``complex=True``.
-Similarly, purely imaginary variables and parameters can be created by setting the attributes ``imag=True``.
-Expressions containing complex variables, parameters, or constants may be complex valued.
-The functions ``is_real``, ``is_complex``, and ``is_imag`` return whether an expression is purely real, complex, or purely imaginary, respectively.
-
-.. code:: python
-
-   # A complex valued variable.
-   x = cp.Variable(complex=True)
-   # A purely imaginary parameter.
-   p = cp.Parameter(imag=True)
-
-   print("p.is_imag() = ", p.is_imag())
-   print("(x + 2).is_real() = ", (x + 2).is_real())
-
-::
-
-   p.is_imag() = True
-   (x + 2).is_real() = False
-
-The top-level expressions in the problem objective must be real valued,
-but subexpressions may be complex.
-Arithmetic and all linear atoms are defined for complex expressions.
-The nonlinear atoms ``abs`` and all norms except ``norm(X, p)`` for ``p < 1`` are also defined for complex expressions.
-All atoms whose domain is symmetric matrices are defined for Hermitian matrices.
-Similarly, the atoms ``quad_form(x, P)`` and ``matrix_frac(x, P)`` are defined for complex ``x`` and Hermitian ``P``.
-All constraints are defined for complex expressions.
-
-The following additional atoms are provided for working with complex expressions:
-
-* ``real(expr)`` gives the real part of ``expr``.
-* ``imag(expr)`` gives the imaginary part of ``expr`` (i.e., ``expr = real(expr) + 1j*imag(expr)``).
-* ``conj(expr)`` gives the complex conjugate of ``expr``.
-* ``expr.H`` gives the Hermitian (conjugate) transpose of ``expr``.
+.. _transforms:
 
 Transforms
 ----------
@@ -308,6 +110,8 @@ constraints hold and :math:`\infty` when they are violated.
    expr.value = inf
 
 The full set of transforms available is discussed in :ref:`transforms-api`.
+
+.. _problem-arithmetic:
 
 Problem arithmetic
 ------------------
@@ -376,6 +180,7 @@ objectives and problems and follow the same rules as above.
 .. \mbox{subject to} &x \in \cap_{i=1}^n \mathcal C_i
 .. \end{array}`
 
+<<<<<<< HEAD
 Solve method options
 --------------------
 
@@ -1148,6 +953,9 @@ Here is the complete list of solver options.
         relative accuracy (default: 1e-9).
 
     For others see `PIQP documentation <https://predict-epfl.github.io/piqp/interfaces/settings>`_.
+=======
+.. _standard-form:
+>>>>>>> origin/master
 
 Getting the standard form
 -------------------------
@@ -1209,486 +1017,6 @@ The structure of the data dict that CVXPY returns depends on the solver. For
 details, print the dictionary, or consult the solver interfaces in
 ``cvxpy/reductions/solvers``.
 
-Reductions
-----------
-
-CVXPY uses a system of **reductions** to rewrite problems from
-the form provided by the user into the standard form that a solver will accept.
-A reduction is a transformation from one problem to an equivalent problem.
-Two problems are equivalent if a solution of one can be converted efficiently
-to a solution of the other.
-Reductions take a CVXPY Problem as input and output a CVXPY Problem.
-The full set of reductions available is discussed in :ref:`reductions-api`.
-
-
-.. _dpp:
-
-Disciplined Parametrized Programming
-------------------------------------
-*Note: DPP requires CVXPY version 1.1.0 or greater.*
-
-:py:class:`Parameters <cvxpy.expressions.constants.parameter.Parameter>` are
-symbolic representations of constants. Using parameters lets you modify the
-values of constants without reconstructing the entire problem. When your
-parametrized problem is constructed according to *Disciplined Parametrized
-Programming (DPP)*, solving it repeatedly for different values of the
-parameters can be much faster than repeatedly solving a new problem.
-
-You should read this tutorial if you intend to solve a :ref:`DCP <dcp>` or
-:ref:`DGP <dgp>` problem many times, for different values of the numerical
-data, or if you want to differentiate through the solution map of a DCP or DGP
-problem.
-
-What is DPP?
-^^^^^^^^^^^^
-DPP is a ruleset for producing parametrized DCP or DGP compliant problems that
-CVXPY can re-canonicalize very quickly. The first time a DPP-compliant problem
-is solved, CVXPY compiles it and caches the mapping from parameters to problem
-data. As a result, subsequent rewritings of DPP problems can be substantially
-faster. CVXPY allows you to solve parametrized problems that are not DPP, but
-you won't see a speed-up when doing so.
-
-The DPP ruleset
-^^^^^^^^^^^^^^^
-
-DPP places mild restrictions on how parameters can enter expressions in
-DCP and DGP problems. First, we describe the DPP ruleset for DCP problems.
-Then, we describe the DPP ruleset for DGP problems.
-
-**DCP problems.**
-In DPP, an expression is said to be parameter-affine if it does
-not involve variables and is affine in its parameters, and it is parameter-free
-if it does not have parameters. DPP introduces two restrictions to DCP:
-
-1. Under DPP, all parameters are classified as affine, just like variables.
-2. Under DPP, the product of two expressions is affine when
-   at least one of the expressions is constant, or when one of the
-   expressions is parameter-affine and the other is parameter-free.
-
-An expression is DPP-compliant if it DCP-compliant subject to these two
-restrictions. You can check whether an expression or problem is DPP-compliant
-by calling the ``is_dcp`` method with the keyword argument ``dpp=True`` (by
-default, this keyword argument is ``False``). For example,
-
-.. code:: python3
-
-    import cvxpy as cp
-
-
-    m, n = 3, 2
-    x = cp.Variable((n, 1))
-    F = cp.Parameter((m, n))
-    G = cp.Parameter((m, n))
-    g = cp.Parameter((m, 1))
-    gamma = cp.Parameter(nonneg=True)
-
-    objective = cp.norm((F + G) @ x - g) + gamma * cp.norm(x)
-    print(objective.is_dcp(dpp=True))
-
-prints ``True``. We can walk through the DPP analysis to understand why
-``objective`` is DPP-compliant. The product ``(F + G) @ x`` is affine under DPP,
-because ``F + G`` is parameter-affine and ``x`` is parameter-free. The difference
-``(F + G) @ x - g`` is affine because the addition atom is affine and both
-``(F + G) @ x`` and  ``- g`` are affine. Likewise ``gamma * cp.norm(x)`` is affine
-under DPP because ``gamma`` is parameter-affine and ``cp.norm(x)`` is
-parameter-free. The final objective is then affine under DPP because addition is
-affine.
-
-Some expressions are DCP-compliant but not DPP-compliant. For example,
-DPP forbids taking the product of two parametrized expressions:
-
-.. code:: python3
-
-    import cvxpy as cp
-
-
-    x = cp.Variable()
-    gamma = cp.Parameter(nonneg=True)
-    problem = cp.Problem(cp.Minimize(gamma * gamma * x), [x >= 1])
-    print("Is DPP? ", problem.is_dcp(dpp=True))
-    print("Is DCP? ", problem.is_dcp(dpp=False))
-
-This code snippet prints
-
-::
-
-    Is DPP? False
-    Is DCP? True
-
-Just as it is possible to rewrite non-DCP problems in DCP-compliant ways, it is
-also possible to re-express non-DPP problems in DPP-compliant ways. For
-example, the above problem can be equivalently written as
-
-.. code:: python3
-
-    import cvxpy as cp
-
-
-    x = cp.Variable()
-    y = cp.Variable()
-    gamma = cp.Parameter(nonneg=True)
-    problem = cp.Problem(cp.Minimize(gamma * y), [y == gamma * x])
-    print("Is DPP? ", problem.is_dcp(dpp=True))
-    print("Is DCP? ", problem.is_dcp(dpp=False))
-
-This snippet prints 
-
-::
-
-    Is DPP? True
-    Is DCP? True
-
-In other cases, you can represent non-DPP transformations of parameters
-by doing them outside of the DSL, e.g., in NumPy. For example, 
-if ``P`` is a parameter and ``x`` is a variable, ``cp.quad_form(x, P)`` is not
-DPP. You can represent a parametric quadratic form like so:
-
-.. code:: python3
-
-  import cvxpy as cp
-  import numpy as np
-  import scipy.linalg
-
-
-  n = 4
-  L = np.random.randn(n, n)
-  P = L.T @ L
-  P_sqrt = cp.Parameter((n, n))
-  x = cp.Variable((n, 1))
-  quad_form = cp.sum_squares(P_sqrt @ x)
-  P_sqrt.value = scipy.linalg.sqrtm(P)
-  assert quad_form.is_dcp(dpp=True)
-
-As another example, the quotient ``expr / p`` is not DPP-compliant when ``p`` is
-a parameter, but this can be rewritten as ``expr * p_tilde``, where ``p_tilde`` is
-a parameter that represents ``1/p``.
-
-**DGP problems.**
-Just as DGP is the log-log analogue of DCP, DPP for DGP is the log-log analog
-of DPP for DCP. DPP introduces two restrictions to DGP:
-
-1. Under DPP, all positive parameters are classified as log-log-affine, just like positive variables.
-2. Under DPP, the power atom ``x**p`` (with base ``x`` and exponent ``p``)
-   is log-log affine as long as ``x`` and ``p`` are not both parametrized.
-
-Note that for powers, the exponent ``p`` must be either a numerical constant
-or a parameter; attempting to construct a power atom in which the exponent
-is a compound expression, e.g., ``x**(p + p)``, where ``p`` is a Parameter,
-will result in a ``ValueError``.
-
-If a parameter appears in a DGP problem as an exponent, it can have any
-sign. If a parameter appears elsewhere in a DGP problem, *it must be
-positive*, i.e., it must be constructed with ``cp.Parameter(pos=True)``.
-
-You can check whether an expression or problem is DPP-compliant
-by calling the ``is_dgp`` method with the keyword argument ``dpp=True`` (by
-default, this keyword argument is ``False``). For example,
-
-.. code:: python3
-
-    import cvxpy as cp
-
-
-    x = cp.Variable(pos=True)
-    y = cp.Variable(pos=True)
-    a = cp.Parameter()
-    b = cp.Parameter()
-    c = cp.Parameter(pos=True)
-    
-    monomial = c * x**a * y**b
-    print(monomial.is_dgp(dpp=True))
-
-prints ``True``. The expressions ``x**a`` and ``y**b`` are log-log affine, since
-``x`` and ``y`` do not contain parameters. The parameter ``c`` is log-log affine
-because it is positive, and the monomial expression is log-log affine because
-the product of log-log affine expression is also log-log affine.
-
-Some expressions are DGP-compliant but not DPP-compliant. For example,
-DPP forbids taking raising a parametrized expression to a power:
-
-.. code:: python3
-
-    import cvxpy as cp
-
-
-    x = cp.Variable(pos=True)
-    a = cp.Parameter()
-    
-    monomial = (x**a)**a
-    print("Is DPP? ", monomial.is_dgp(dpp=True))
-    print("Is DGP? ", monomial.is_dgp(dpp=False))
-
-This code snippet prints
-
-::
-
-    Is DPP? False
-    Is DGP? True
-
-You can represent non-DPP transformations of parameters
-by doing them outside of CVXPY, e.g., in NumPy. For example, 
-you could rewrite the above program as the following DPP-complaint program
-
-.. code:: python3
-
-    import cvxpy as cp
-
-
-    a = 2.0
-    x = cp.Variable(pos=True)
-    b = cp.Parameter(value=a**2)
-    
-    monomial = x**b
-
-Repeatedly solving a DPP problem
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-The following example demonstrates how parameters can speed-up repeated
-solves of a DPP-compliant DCP problem.
-
-.. code:: python3
-
-    import cvxpy as cp
-    import numpy
-    import matplotlib.pyplot as plt
-    import time
-
-    n = 15
-    m = 10
-    numpy.random.seed(1)
-    A = numpy.random.randn(n, m)
-    b = numpy.random.randn(n)
-    # gamma must be nonnegative due to DCP rules.
-    gamma = cp.Parameter(nonneg=True)
-
-    x = cp.Variable(m)
-    error = cp.sum_squares(A @ x - b)
-    obj = cp.Minimize(error + gamma*cp.norm(x, 1))
-    problem = cp.Problem(obj)
-    assert problem.is_dcp(dpp=True)
-
-    gamma_vals = numpy.logspace(-4, 1)
-    times = []
-    new_problem_times = []
-    for val in gamma_vals:
-        gamma.value = val
-        start = time.time()
-        problem.solve()
-        end = time.time()
-        times.append(end - start)
-        new_problem = cp.Problem(obj)
-        start = time.time()
-        new_problem.solve()
-        end = time.time()
-        new_problem_times.append(end - start)
-
-    plt.rc('text', usetex=True)
-    plt.rc('font', family='serif')
-    plt.figure(figsize=(6, 6))
-    plt.plot(gamma_vals, times, label='Re-solving a DPP problem')
-    plt.plot(gamma_vals, new_problem_times, label='Solving a new problem')
-    plt.xlabel(r'$\gamma$', fontsize=16)
-    plt.ylabel(r'time (s)', fontsize=16)
-    plt.legend()
-
-.. image:: advanced_files/resolving_dpp.png
-
-Similar speed-ups can be obtained for DGP problems.
-
-.. _derivatives:
-
-
-Sensitivity analysis and gradients
-------------------------------------
-*Note: This feature requires CVXPY version 1.1.0 or greater.*
-
-An optimization problem can be viewed as a function mapping parameters
-to solutions. This solution map is sometimes differentiable. CVXPY
-has built-in support for computing the derivative of the optimal variable
-values of a problem with respect to small perturbations of the parameters
-(i.e., the ``Parameter`` instances appearing in a problem).
-
-The problem class exposes two methods related to computing the derivative.
-The :py:func:`derivative <cvxpy.problems.problem.Problem.derivative>` evaluates
-the derivative given perturbations to the parameters. This
-lets you calculate how the solution to a problem would change
-given small changes to the parameters, without re-solving the problem. 
-The :py:func:`backward <cvxpy.problems.problem.Problem.backward>` method
-evaluates the adjoint of the derivative, computing the gradient of the solution
-with respect to the parameters. This can be useful when combined with
-automatic differentiation software.
-
-The derivative and backward methods are only meaningful when the problem
-contains parameters. In order for a problem to be differentiable, it must
-be :ref:`DPP-compliant <dpp>`. CVXPY can compute the derivative of any
-DPP-compliant DCP or DGP problem. At non-differentiable points, CVXPY
-computes a heuristic quantity.
-
-**Example.**
-
-As a first example, we solve a trivial problem with an analytical solution,
-to illustrate the usage of the ``backward`` and ``derivative``
-functions. In the following block of code, we construct a problem with
-a scalar variable ``x`` and a scalar parameter ``p``. The problem
-is to minimize the quadratic ``(x - 2*p)**2``.
-
-.. code:: python3
-
-    import cvxpy as cp
-
-    x = cp.Variable()
-    p = cp.Parameter()
-    quadratic = cp.square(x - 2 * p)
-    problem = cp.Problem(cp.Minimize(quadratic))
-
-Next, we solve the problem for the particular value of ``p == 3``. Notice that
-when solving the problem, we supply the keyword argument ``requires_grad=True``
-to the ``solve`` method.
-
-.. code:: python3
-
-    p.value = 3.
-    problem.solve(requires_grad=True)
-
-Having solved the problem with ``requires_grad=True``, we can now use the
-``backward`` and ``derivative`` to differentiate through the problem.
-First, we compute the gradient of the solution with respect to its parameter
-by calling the ``backward()`` method. As a side-effect, the ``backward()``
-method populates the ``gradient`` attribute on all parameters with the gradient
-of the solution with respect to that parameter.
-
-.. code:: python3
-
-    problem.backward()
-    print("The gradient is {0:0.1f}.".format(p.gradient))
-
-In this case, the problem has the trivial analytical solution ``2*p``, and
-the gradient is therefore just 2. So, as expected, the above code prints
-
-.. code::
-
-    The gradient is 2.0.
-
-Next, we use the ``derivative`` method to see how a small change in ``p``
-would affect the solution ``x``. We will perturb ``p`` by ``1e-5``, by
-setting ``p.delta = 1e-5``, and calling the ``derivative`` method will populate
-the ``delta`` attribute of ``x`` with the the change in ``x`` predicted by
-a first-order approximation (which is ``dx/dp * p.delta``).
-
-.. code:: python3
-
-    p.delta = 1e-5
-    problem.derivative()
-    print("x.delta is {0:2.1g}.".format(x.delta))
-
-In this case the solution is trivial and its derivative is just ``2*p``, so we
-know that the delta in ``x`` should be ``2e-5``. As expected, the output is
-
-.. code::
-
-    x.delta is 2e-05.
-
-We emphasize that this example is trivial, because it has a trivial analytical
-solution, with a trivial derivative. The ``backward()`` and ``forward()``
-methods are useful because the vast majority of convex optimization problems
-do not have analytical solutions: in these cases, CVXPY can compute solutions
-and their derivatives, even though it would be impossible to derive them by
-hand.
-
-**Note.** In this simple example, the variable ``x`` was a scalar, so the
-``backward`` method computed the gradient of ``x`` with respect to ``p``.
-When there is more than one scalar variable, by default, ``backward``
-computes the gradient of the *sum* of the optimal variable values with respect
-to the parameters.
-
-More generally, the ``backward`` method can be used to compute the gradient of
-a scalar-valued function ``f`` of the optimal variables, with
-respect to the parameters. If ``x(p)`` denotes the optimal value of
-the variable (which might be a vector or a matrix) for a particular value of
-the parameter ``p`` and ``f(x(p))`` is a scalar, then ``backward`` can be used
-to compute the gradient of ``f`` with respect to ``p``. Let ``x* = x(p)``,
-and say the derivative of ``f`` with respect to ``x*`` is ``dx``. To compute
-the derivative of ``f`` with respect to ``p``, before calling
-``problem.backward()``, just set ``x.gradient = dx``.
-
-The ``backward`` method can be powerful when combined with software for
-automatic differentiation. We recommend the software package
-`CVXPY Layers <https://www.github.com/cvxgrp/cvxpylayers>`_, which provides
-differentiable PyTorch and TensorFlow wrappers for CVXPY problems.
-
-**backward or derivative?** The ``backward`` method should be used when
-you need the gradient of (a scalar-valued function) of the solution, with
-respect to the parameters. If you only want to do a sensitivity analysis,
-that is, if all you're interested in is how the solution would change if
-one or more parameters were changed, you should use the ``derivative``
-method. When there are multiple variables, it is much more efficient to
-compute sensitivities using the derivative method than it would be to compute
-the entire Jacobian (which can be done by calling backward multiple times,
-once for each standard basis vector).
-
-**Next steps.** See the `introductory notebook <https://www.cvxpy.org/examples/derivatives/fundamentals.html>`_
-on derivatives.
-
-.. _CVXOPT: http://cvxopt.org/
-.. _COPT: https://github.com/COPT-Public/COPT-Release
-.. _ECOS: https://www.embotech.com/ECOS
-.. _SCS: http://github.com/cvxgrp/scs
-.. _SDPA: https://sdpa-python.github.io
-.. _GLOP: https://developers.google.com/optimization
-.. _GLPK: https://www.gnu.org/software/glpk/
-.. _GLPK_MI: https://www.gnu.org/software/glpk/
-.. _GUROBI: https://www.gurobi.com/
-.. _MOSEK: https://www.mosek.com/
-.. _CBC: https://projects.coin-or.org/Cbc
-.. _CGL: https://projects.coin-or.org/Cgl
-.. _CPLEX: https://www.ibm.com/docs/en/icos
-.. _NAG: https://www.nag.co.uk/nag-library-python/
-.. _OSQP: https://osqp.org/
-.. _PDLP: https://developers.google.com/optimization
-.. _SCIP: https://scip.zib.de/
-.. _XPRESS: https://www.fico.com/en/products/fico-xpress-optimization
-.. _SCIPY: https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.linprog.html#scipy.optimize.linprog
-.. _HiGHS: https://www.maths.ed.ac.uk/hall/HiGHS/#guide
-.. _CLARABEL: https://oxfordcontrol.github.io/ClarabelDocs/
-.. _PIQP: https://predict-epfl.github.io/piqp/
-.. _PROXQP: https://github.com/simple-robotics/proxsuite
-
-Custom Solvers
-------------------------------------
-Although ``cvxpy`` supports many different solvers out of the box, it is also possible to define and use custom solvers. This can be helpful in prototyping or developing custom solvers tailored to a specific application.
-
-To do so, you have to implement a solver class that is a child of ``cvxpy.reductions.solvers.qp_solvers.qp_solver.QpSolver`` or ``cvxpy.reductions.solvers.conic_solvers.conic_solver.ConicSolver``. Then you pass an instance of this solver class to ``solver.solve(.)`` as following:
-
-.. code:: python3
-
-    import cvxpy as cp
-    from cvxpy.reductions.solvers.qp_solvers.osqp_qpif import OSQP
-
-
-    class CUSTOM_OSQP(OSQP):
-        MIP_CAPABLE=False
-
-        def name(self):
-            return "CUSTOM_OSQP"
-
-        def solve_via_data(self, *args, **kwargs):
-            print("Solving with a custom QP solver!")
-            super().solve_via_data(*args, **kwargs)
-
-
-    x = cp.Variable()
-    quadratic = cp.square(x)
-    problem = cp.Problem(cp.Minimize(quadratic))
-    problem.solve(solver=CUSTOM_OSQP())
-
-You might also want to override the methods ``invert`` and ``import_solver`` of the ``Solver`` class.
-
-Note that the string returned by the ``name`` property should be different to all of the officially supported solvers 
-(a list of which can be found in ``cvxpy.settings.SOLVERS``). Also, if your solver is mixed integer capable, 
-you should set the class variable ``MIP_CAPABLE`` to ``True``. If your solver is both mixed integer capable 
-and a conic solver (as opposed to a QP solver), you should set the class variable ``MI_SUPPORTED_CONSTRAINTS`` 
-to the list of cones supported when solving mixed integer problems. Usually ``MI_SUPPORTED_CONSTRAINTS`` 
-will be the same as the class variable ``SUPPORTED_CONSTRAINTS``.
-
 .. _canonicalization-backends:
 
 Canonicalization backends
@@ -1703,4 +1031,3 @@ Currently, the following canonicalization backends are supported:
 *  | SCIPY: A pure Python implementation based on the SciPy sparse module.
    | Generally fast for problems that are already vectorized.
 *  NUMPY: Reference implementation in pure NumPy. Fast for some small or dense problems.
-
