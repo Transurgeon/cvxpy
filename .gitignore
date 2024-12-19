@@ -62,3 +62,6 @@ cvxpy/version.py
 
 # Hypothesis testing
 .hypothesis/
+
+# Generated while building documentation.
+doc/source/auto_examples

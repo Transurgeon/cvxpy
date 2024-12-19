@@ -134,7 +134,7 @@ website to use a modern theme based on Sphinx Immaterial.
 .. toctree::
    :hidden:
 
-   examples/index
+   auto_examples/index
 
 .. toctree::
    :hidden:
