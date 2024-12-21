@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:00.000** total execution time for 1 file **from all galleries**:
+**00:00.000** total execution time for 7 files **from all galleries**:
 
 .. container::
 
@@ -32,6 +32,24 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_auto_examples_least_squares.py` (``../../examples2/least_squares.py``)
+   * - :ref:`sphx_glr_auto_examples_advanced_least_squares.py` (``../../examples2/advanced/least_squares.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_basic_least_squares.py` (``../../examples2/basic/least_squares.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_finance_least_squares.py` (``../../examples2/finance/least_squares.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_geometric-programming_least_squares.py` (``../../examples2/geometric-programming/least_squares.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_machine-learning_least_squares.py` (``../../examples2/machine-learning/least_squares.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_power-systems_least_squares.py` (``../../examples2/power-systems/least_squares.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_quasi-convex-programming_least_squares.py` (``../../examples2/quasi-convex-programming/least_squares.py``)
      - 00:00.000
      - 0.0
