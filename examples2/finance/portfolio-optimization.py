@@ -1,9 +1,11 @@
 """
-====================
-Linear Least Squares
-====================
+======================
+Portfolio Optimization
+======================
 
-Solve a linear least squares problem using CVXPY.
+In this example we show how to do portfolio optimization using CVXPY. 
+We begin with the basic definitions. In portfolio optimization we have 
+some amount of money to invest in any of n different assets
 """
 
 import numpy as np

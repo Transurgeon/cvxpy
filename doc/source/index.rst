@@ -117,43 +117,14 @@ website to use a modern theme based on Sphinx Immaterial.
 .. _SCS: http://github.com/cvxgrp/scs
 
 .. toctree::
-   :hidden:
-
-   install/index
-
-.. toctree::
-    :hidden:
-
-    User Guide <tutorial/index>
-
-.. toctree::
-   :hidden:
-
-   API Documentation <api_reference/cvxpy>
-
-.. toctree::
-   :hidden:
-
-   auto_examples/index
-
-.. toctree::
-   :hidden:
-
-   contributing/index
-
-.. toctree::
-   :hidden:
-
-   Changelog <updates/index>
-
-.. toctree::
    :maxdepth: 1
    :hidden:
 
+   install/index
+   User Guide <tutorial/index>
+   API Documentation <api_reference/cvxpy>
+   auto_examples/index
+   contributing/index
+   Changelog <updates/index>
    faq/index
-
-.. toctree::
-   :hidden:
-
    resources/index
-

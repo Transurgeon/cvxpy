@@ -1,9 +1,9 @@
 """
-====================
-Linear Least Squares
-====================
+==================
+Optimal Power Flow
+==================
 
-Solve a linear least squares problem using CVXPY.
+Solve a linearized DC-OPF problem using CVXPY.
 """
 
 import numpy as np

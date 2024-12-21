@@ -1,9 +1,9 @@
 """
-====================
-Linear Least Squares
-====================
+===========================
+Concave fractional function
+===========================
 
-Solve a linear least squares problem using CVXPY.
+This example demonstrates the use of CVXPY to solve a concave fractional problem.
 """
 
 import numpy as np

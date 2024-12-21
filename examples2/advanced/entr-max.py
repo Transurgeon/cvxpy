@@ -1,9 +1,9 @@
 """
 ====================
-Linear Least Squares
+Entropy Maximization
 ====================
 
-Solve a linear least squares problem using CVXPY.
+Solve an entropy maximization problem using CVXPY.
 """
 
 import numpy as np

@@ -1,9 +1,10 @@
 """
-====================
-Linear Least Squares
-====================
+==============================
+Maximizing the volume of a box
+==============================
 
-Solve a linear least squares problem using CVXPY.
+This example maximizes the volume of a box by formulating the problem as a
+geometric program.
 """
 
 import numpy as np

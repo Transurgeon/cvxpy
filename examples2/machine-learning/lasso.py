@@ -1,9 +1,9 @@
 """
-====================
-Linear Least Squares
-====================
+================
+Lasso regression
+================
 
-Solve a linear least squares problem using CVXPY.
+Demonstrates the use of CVXPY to solve a lasso regression problem.
 """
 
 import numpy as np
