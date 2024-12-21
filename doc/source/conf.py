@@ -13,6 +13,7 @@
 
 import os
 import sys
+from sphinx_gallery.sorting import ExplicitOrder
 
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
@@ -52,6 +53,17 @@ extensions = [
 sphinx_gallery_conf = {
      'examples_dirs': "../../examples2",   # path to your example scripts
      'gallery_dirs': 'auto_examples',  # path to where to save gallery generated output
+     'subsection_order': ExplicitOrder(
+        [
+            '../../examples2/basic',
+            '../../examples2/geometric-programming',
+            '../../examples2/quasi-convex-programming',
+            '../../examples2/finance',
+            '../../examples2/power-systems',
+            '../../examples2/machine-learning',
+            '../../examples2/advanced',
+        ]
+    ),
 }
 
 # To suppress autodoc/numpydoc warning.
