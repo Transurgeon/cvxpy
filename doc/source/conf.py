@@ -13,6 +13,7 @@
 
 import os
 import sys
+from sphinx_gallery.sorting import ExplicitOrder
 
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
@@ -46,7 +47,25 @@ extensions = [
     'sphinx_inline_tabs',
     'sphinx_design',
     'sphinx_immaterial',
+    'sphinx_gallery.gen_gallery',
 ]
+
+sphinx_gallery_conf = {
+     'examples_dirs': "../../examples2",   # path to your example scripts
+     'gallery_dirs': 'auto_examples',  # path to where to save gallery generated output
+     'subsection_order': ExplicitOrder(
+        [
+            '../../examples2/basic',
+            '../../examples2/geometric-programming',
+            '../../examples2/quasi-convex-programming',
+            '../../examples2/finance',
+            '../../examples2/power-systems',
+            '../../examples2/machine-learning',
+            '../../examples2/advanced',
+        ]
+    ),
+    'image_scrapers': ('matplotlib',),
+}
 
 # To suppress autodoc/numpydoc warning.
 # http://stackoverflow.com/questions/12206334/sphinx-autosummary-toctree-contains-reference-to-nonexisting-document-warnings
@@ -134,12 +153,8 @@ pygments_style = 'sphinx'
 
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
-import alabaster
-
 table_styling_embed_css = False
 
-html_theme_path = [alabaster.get_path(), "../themes"]
-extensions += ['alabaster']
 html_theme = 'sphinx_immaterial'
 # Note: the version selector could be omitted for local builds.
 # See https://github.com/cvxpy/cvxpy/pull/1624#discussion_r795207339 for a discussion on the topic
