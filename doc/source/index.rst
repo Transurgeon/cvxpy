@@ -122,6 +122,7 @@ website to use a modern theme based on Sphinx Immaterial.
 
    install/index
    User Guide <tutorial/index>
+   Functions <functions/index>
    API Documentation <api_reference/cvxpy>
    auto_examples/index
    contributing/index
