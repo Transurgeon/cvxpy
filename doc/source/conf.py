@@ -64,6 +64,7 @@ sphinx_gallery_conf = {
             '../../examples2/advanced',
         ]
     ),
+    'image_scrapers': ('matplotlib',),
 }
 
 # To suppress autodoc/numpydoc warning.
