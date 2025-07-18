@@ -63,9 +63,11 @@ from cvxpy.reductions.solvers.defines import installed_solvers as installed_solv
 from cvxpy.settings import (
     CBC as CBC,
     CLARABEL as CLARABEL,
+    CUCLARABEL as CUCLARABEL,
     COPT as COPT,
     CPLEX as CPLEX,
     CPP_CANON_BACKEND as CPP_CANON_BACKEND,
+    CUOPT as CUOPT,
     CVXOPT as CVXOPT,
     DIFFCP as DIFFCP,
     ECOS as ECOS,

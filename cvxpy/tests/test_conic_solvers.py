@@ -543,6 +543,114 @@ class TestClarabel(BaseTest):
         sth.check_complementarity(places)
         sth.check_dual_domains(places)
 
+@unittest.skipUnless('CUCLARABEL' in INSTALLED_SOLVERS, 'CLARABEL is not installed.')
+class TestCuClarabel(BaseTest):
+
+    """ Unit tests for Clarabel. """
+    def setUp(self) -> None:
+
+        self.x = cp.Variable(2, name='x')
+        self.y = cp.Variable(3, name='y')
+
+        self.A = cp.Variable((2, 2), name='A')
+        self.B = cp.Variable((2, 2), name='B')
+        self.C = cp.Variable((3, 2), name='C')
+
+    def test_clarabel_parameter_update(self) -> None:
+        """Test warm start.
+        """
+        x = cp.Variable(2)
+        P = cp.Parameter(nonneg=True),
+        A = cp.Parameter(4)
+        b = cp.Parameter(2, nonneg=True)
+        q = cp.Parameter(2)
+
+        def update_parameters(P, A, b, q):
+            P[0].value = np.random.rand()
+            A.value = np.random.randn(4)
+            b.value = np.random.rand(2)
+            q.value = np.random.randn(2)
+
+        prob = cp.Problem(
+                cp.Minimize(P[0]*cp.square(x[0]) + cp.quad_form(x, np.ones([2, 2])) + q.T @ x),
+                [A[0] * x[0] + A[1] * x[1] == b[0],
+                 A[2] * x[0] + A[3] * x[1] <= b[1]]
+            )
+
+        update_parameters(P, A, b, q)
+        result1 = prob.solve(solver=cp.CLARABEL, warm_start=False)
+        result2 = prob.solve(solver=cp.CLARABEL, warm_start=True)
+        self.assertAlmostEqual(result1, result2)
+
+        update_parameters(P, A, b, q)
+        result1 = prob.solve(solver=cp.CLARABEL, warm_start=True)
+        result2 = prob.solve(solver=cp.CLARABEL, warm_start=False)
+        self.assertAlmostEqual(result1, result2)
+
+        # consecutive solves, no data update
+        result1 = prob.solve(solver=cp.CLARABEL, warm_start=False)
+        self.assertAlmostEqual(result1, result2)
+
+
+    def test_clarabel_lp_0(self) -> None:
+        StandardTestLPs.test_lp_0(solver=cp.CUCLARABEL)
+
+    def test_clarabel_nonstandard_name(self) -> None:
+        # Test that solver name with non-standard capitalization works.
+        StandardTestLPs.test_lp_0(solver="CuClarabel")
+
+    def test_clarabel_lp_1(self) -> None:
+        StandardTestLPs.test_lp_1(solver='CUCLARABEL')
+
+    def test_clarabel_lp_2(self) -> None:
+        StandardTestLPs.test_lp_2(solver='CUCLARABEL')
+
+    def test_clarabel_lp_3(self) -> None:
+        StandardTestLPs.test_lp_3(solver='CUCLARABEL')
+
+    def test_clarabel_lp_4(self) -> None:
+        StandardTestLPs.test_lp_4(solver='CUCLARABEL')
+
+    def test_clarabel_lp_5(self) -> None:
+        StandardTestLPs.test_lp_5(solver='CUCLARABEL')
+
+    def test_clarabel_qp_0(self) -> None:
+        StandardTestQPs.test_qp_0(solver='CUCLARABEL')
+
+    def test_clarabel_qp_0_linear_obj(self) -> None:
+        StandardTestQPs.test_qp_0(solver='CUCLARABEL', use_quad_obj=False)
+
+    def test_clarabel_socp_0(self) -> None:
+        StandardTestSOCPs.test_socp_0(solver='CUCLARABEL')
+
+    def test_clarabel_socp_1(self) -> None:
+        StandardTestSOCPs.test_socp_1(solver='CUCLARABEL')
+
+    def test_clarabel_socp_2(self) -> None:
+        StandardTestSOCPs.test_socp_2(solver='CUCLARABEL')
+
+    def test_clarabel_socp_3(self) -> None:
+        # axis 0
+        breakpoint()
+        StandardTestSOCPs.test_socp_3ax0(solver='CUCLARABEL')
+        # axis 1
+        StandardTestSOCPs.test_socp_3ax1(solver='CUCLARABEL')
+
+    def test_clarabel_expcone_1(self) -> None:
+        StandardTestECPs.test_expcone_1(solver='CUCLARABEL')
+
+    def test_clarabel_exp_soc_1(self) -> None:
+        StandardTestMixedCPs.test_exp_soc_1(solver='CUCLARABEL')
+
+    def test_clarabel_pcp_0(self) -> None:
+        StandardTestSOCPs.test_socp_0(solver='CUCLARABEL')
+
+    def test_clarabel_pcp_1(self) -> None:
+        StandardTestSOCPs.test_socp_1(solver='CUCLARABEL')
+
+    def test_clarabel_pcp_2(self) -> None:
+        StandardTestSOCPs.test_socp_2(solver='CUCLARABEL')
+
 
 @unittest.skipUnless('MOSEK' in INSTALLED_SOLVERS, 'MOSEK is not installed.')
 class TestMosek(unittest.TestCase):
@@ -721,6 +829,7 @@ class TestMosek(unittest.TestCase):
     def test_mosek_sdp_power(self) -> None:
         """Test the problem in issue #2128"""
         StandardTestMixedCPs.test_sdp_pcp_1(solver='MOSEK')
+
 
     def test_power_portfolio(self) -> None:
         """Test the portfolio problem in issue #2042"""
@@ -2154,7 +2263,12 @@ class TestHIGHS:
         ],
     )
     def test_highs_solving(self, problem) -> None:
-        problem(solver=cp.HIGHS)
+        # HACK needed to use the HiGHS conic interface rather than 
+        # the QP interface for LPs.
+        from cvxpy.reductions.solvers.conic_solvers.highs_conif import HIGHS
+        solver = HIGHS()
+        solver.name = lambda: "HIGHS CONIC"
+        problem(solver=solver)
 
     @pytest.mark.parametrize(
         ["problem", "confirmation_string"],
@@ -2210,6 +2324,7 @@ class TestHIGHS:
             "dual_feasibility_tolerance": 1e-3,
         }
         problem(solver=cp.HIGHS, highs_options=highs_options)
+
 
 
 class TestAllSolvers(BaseTest):
@@ -2506,3 +2621,69 @@ class TestCOPT(unittest.TestCase):
 
         # Valid arg.
         problem.solve(solver=cp.COPT, feastol=1e-9)
+
+@unittest.skipUnless("CUOPT" in INSTALLED_SOLVERS, "CUOPT is not installed.")
+class TestCUOPT(unittest.TestCase):
+
+    import os
+    kwargs={"pdlp_solver_mode": os.environ.get("CUOPT_PDLP_SOLVER_MODE", "Stable2"),
+            "solver_method": os.environ.get("CUOPT_SOLVER_METHOD", 0)
+            }
+
+    def test_cuopt_lp_0(self) -> None:
+        StandardTestLPs.test_lp_0(solver="CUOPT", duals=True, places=4, **TestCUOPT.kwargs)
+
+    def test_cuopt_lp_1(self) -> None:
+        StandardTestLPs.test_lp_1(solver="CUOPT", duals=True, places=4, **TestCUOPT.kwargs)
+
+    def test_cuopt_lp_2(self) -> None:
+        StandardTestLPs.test_lp_2(solver="CUOPT", duals=True, places=4, **TestCUOPT.kwargs)
+
+    def test_cuopt_lp_3(self) -> None:
+        StandardTestLPs.test_lp_3(solver="CUOPT", duals=True, places=4, **TestCUOPT.kwargs)
+
+    def test_cuopt_lp_4(self) -> None:
+        # In this case cuopt throws an exception because there are crossing
+        # variable bounds x <= 0 and x >= 1
+        try:
+            StandardTestLPs.test_lp_4(solver="CUOPT", duals=True, places=4, **TestCUOPT.kwargs)
+        except Exception as e:
+            assert "crossing bounds" in str(e)
+
+    def test_cuopt_lp_5(self) -> None:
+        StandardTestLPs.test_lp_5(solver='CUOPT', duals=True, places=4, **TestCUOPT.kwargs)
+
+    def test_cuopt_lp_6(self) -> None:
+        StandardTestLPs.test_lp_5(solver='CUOPT', duals=True, places=4, **TestCUOPT.kwargs)
+
+    def test_cuopt_lp_7(self) -> None:
+        StandardTestLPs.test_lp_5(solver='CUOPT', duals=True, places=4, **TestCUOPT.kwargs)
+
+    def test_cuopt_mi_lp_0(self) -> None:
+        StandardTestLPs.test_mi_lp_0(solver='CUOPT', **TestCUOPT.kwargs)
+
+    def test_cuopt_mi_lp_1(self) -> None:
+        StandardTestLPs.test_mi_lp_1(solver='CUOPT', **TestCUOPT.kwargs)
+
+    def test_cuopt_mi_lp_2(self) -> None:
+        StandardTestLPs.test_mi_lp_2(solver='CUOPT', **TestCUOPT.kwargs)
+
+    def test_cuopt_mi_lp_3(self) -> None:
+        TestCUOPT.kwargs["time_limit"] = 5
+        StandardTestLPs.test_mi_lp_3(solver='CUOPT', **TestCUOPT.kwargs)
+        del TestCUOPT.kwargs["time_limit"]
+
+    # This is an unconstrained problem, which cuopt doesn't handle.
+    # Error message from cvxpy should be returned
+    def test_cuopt_mi_lp_4(self) -> None:
+        try:
+            StandardTestLPs.test_mi_lp_4(solver='CUOPT', **TestCUOPT.kwargs)
+        except Exception as e:
+            assert "there are not enough constraints in the problem" in str(e)
+
+    def test_cuopt_mi_lp_5(self) -> None:
+        StandardTestLPs.test_mi_lp_5(solver='CUOPT', **TestCUOPT.kwargs, time_limit=5)
+
+    def test_cuopt_mi_lp_7(self) -> None:
+        StandardTestLPs.test_mi_lp_5(solver='CUOPT', **TestCUOPT.kwargs, time_limit=5)
+
