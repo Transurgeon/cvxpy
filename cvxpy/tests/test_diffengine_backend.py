@@ -220,6 +220,67 @@ class TestDiffengineConverter(BaseTest):
             elif isinstance(expected, np.ndarray):
                 self.assertItemsAlmostEqual(data_de[key], expected, places=10)
 
+    @staticmethod
+    def _quad_form_problem(P0):
+        x = cp.Variable(P0.shape[0])
+        return cp.Problem(cp.Minimize(cp.quad_form(x, P0)), [cp.sum(x) == 1])
+
+    def test_low_density_constant_dense_P_routes_sparse(self) -> None:
+        """A dense-stored but mostly-zero constant P (H * np.eye(n)) takes the
+        sparse quad_form binding: the stuffed P stores only the true pattern,
+        not a dense n^2 Hessian block."""
+        n = 30  # density 1/n < SPARSE_DENSITY_THRESHOLD
+        P0 = 2.5 * np.eye(n)
+        data, _, _ = self._quad_form_problem(P0).get_problem_data(
+            SOLVER, canon_backend=DIFFENGINE)
+        self.assertEqual(data["P"].nnz, n)
+
+    def test_dense_constant_P_keeps_dense_route(self) -> None:
+        """A genuinely dense constant P (density >= threshold) still takes the
+        dense binding with its full pattern intact."""
+        n = 10
+        rng = np.random.default_rng(0)
+        A = rng.standard_normal((n, n))
+        P0 = A @ A.T + n * np.eye(n)
+        data, _, _ = self._quad_form_problem(P0).get_problem_data(
+            SOLVER, canon_backend=DIFFENGINE)
+        data_cpp, _, _ = self._quad_form_problem(P0).get_problem_data(SOLVER)
+        self.assertEqual(data["P"].nnz, data_cpp["P"].nnz)
+        self.assertItemsAlmostEqual(
+            data["P"].toarray(), data_cpp["P"].toarray(), places=10)
+
+    def test_density_route_values_match_dense_route(self) -> None:
+        """The sparse route produces the same stuffed P values as the dense
+        route it replaces (forced by zeroing the density threshold)."""
+        n = 30
+        P0 = np.diag(np.arange(1.0, n + 1.0))
+        data_sparse, _, _ = self._quad_form_problem(P0).get_problem_data(
+            SOLVER, canon_backend=DIFFENGINE)
+        with mock.patch.object(s, "SPARSE_DENSITY_THRESHOLD", 0.0):
+            data_dense, _, _ = self._quad_form_problem(P0).get_problem_data(
+                SOLVER, canon_backend=DIFFENGINE)
+        self.assertItemsAlmostEqual(
+            data_sparse["P"].toarray(), data_dense["P"].toarray(), places=10)
+
+    def test_parametric_P_not_sparsified(self) -> None:
+        """A parametric P must take the parametric (matrix-valued child) branch
+        even when its current value is mostly zeros -- sparsifying it would
+        freeze the sparsity pattern to that value."""
+        from cvxpy.reductions.solvers.nlp_solvers.diff_engine import converters
+
+        n = 30
+        x = cp.Variable(n)
+        P = cp.Parameter((n, n), PSD=True)
+        P.value = np.eye(n)
+        sqf = SymbolicQuadForm(x, cp.psd_wrap(P), cp.quad_form(x, cp.psd_wrap(P)))
+        with mock.patch.object(
+                converters._diffengine, "make_quad_form") as make_qf:
+            converters.convert_symbolic_quad_form(
+                sqf, {x.id: "x_node"}, n, {P.id: "P_node"})
+        call_args = make_qf.call_args[0]
+        self.assertEqual(call_args[0], "P_node")  # P fed as a matrix-valued child
+        self.assertEqual(call_args[2], "dense")
+
 
 class TestDiffengineConeProgram(BaseTest):
     """DiffengineConeProgram re-solve semantics."""
