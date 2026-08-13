@@ -452,6 +452,22 @@ class TestDiffengineSelection(BaseTest):
         self.assertAlmostEqual(prob.value, 0.0)
         self.assertItemsAlmostEqual(x.value, np.ones(3), places=4)
 
+    def test_backend_switch_invalidates_cache(self) -> None:
+        """An explicit canon_backend on a re-solve must not silently reuse the
+        chain cached for a different backend."""
+        p = cp.Parameter()
+        p.value = 1.0
+        x = cp.Variable()
+        prob = cp.Problem(cp.Minimize(cp.square(x - p)))
+        prob.solve(solver=SOLVER)
+        first = type(prob._cache.param_prog).__name__
+        prob.solve(solver=SOLVER, canon_backend=DIFFENGINE)
+        second = type(prob._cache.param_prog).__name__
+        self.assertEqual(second, "DiffengineConeProgram")
+        self.assertNotEqual(first, second)
+        prob.solve(solver=SOLVER)
+        self.assertEqual(type(prob._cache.param_prog).__name__, first)
+
     def test_explicit_diffengine_dpp_parametric_resolve(self) -> None:
         """On the DPP path the DiffengineConeProgram is cached across solves;
         parameter updates must flow through the cached extractor."""
