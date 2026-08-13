@@ -30,6 +30,7 @@ from cvxpy.atoms.quad_form import QuadForm
 from cvxpy.atoms.quad_over_lin import quad_over_lin
 from cvxpy.expressions.constants import Constant
 from cvxpy.reductions.solvers.nlp_solvers.diff_engine.helpers import (
+    make_constant_quad_form,
     make_dense_left_matmul,
     make_dense_right_matmul,
     make_sparse_left_matmul,
@@ -197,29 +198,7 @@ def convert_symbolic_quad_form(expr, var_dict, n_vars, param_dict):
                 P_inner = P_inner.args[0]
             P_c = convert_expr(P_inner, var_dict, n_vars, param_dict)
             return _diffengine.make_quad_form(P_c, x_c, "dense", None, n)
-        P_val = P.value
-        if not sparse.issparse(P_val):
-            P_dense = to_dense_float(P_val)
-            # A constant dense P that is mostly zeros: route it to the sparse
-            # quad_form binding to avoid building a dense Hessian block.
-            # Mirrors convert_matmul; constants only, so no parametric sparsity
-            # pattern is ever frozen (parametric P took the branch above).
-            density = np.count_nonzero(P_dense) / P_dense.size if P_dense.size else 1.0
-            if density < s.SPARSE_DENSITY_THRESHOLD:
-                P_val = sparse.csr_array(P_dense)
-        if sparse.issparse(P_val):
-            P_csr = P_val.tocsr()
-            # Explicitly stored zeros (e.g. from scipy block_diag of dense
-            # blocks) would inflate the Hessian pattern the engine derives.
-            P_csr.eliminate_zeros()
-            return _diffengine.make_quad_form(
-                None, x_c, "sparse",
-                P_csr.data.astype(np.float64),
-                P_csr.indices.astype(np.int32),
-                P_csr.indptr.astype(np.int32),
-                P_csr.shape[0], P_csr.shape[1])
-        return _diffengine.make_quad_form(
-            None, x_c, "dense", P_dense.flatten(order='F'), n)
+        return make_constant_quad_form(x_c, P.value, n)
 
     if isinstance(orig, Power):  # PowerApprox subclasses Power; canon only p == 2
         return convert_expr(
