@@ -202,6 +202,30 @@ class TestDiffengineConverter(BaseTest):
             self.assertAlmostEqual(prob_de.value, prob_base.value, places=4)
             self.assertItemsAlmostEqual(X_de, X.value, places=3)
 
+    def test_matmul_chain_1d_collapse_not_reassociated(self) -> None:
+        """A chain that contracts through a 1-D operand must be converted as
+        written: (a @ b) @ c != a @ (b @ c) across numpy's 1-D collapse."""
+        rng = np.random.default_rng(0)
+        X = cp.Variable((2, 3))
+        v = np.array([1.0, 2.0, 3.0])
+        w = np.array([1.0, 1.0])
+        prob = cp.Problem(cp.Minimize(cp.sum_squares(X)), [(X @ v) @ w >= 1])
+        prob.solve(solver=SOLVER, canon_backend=DIFFENGINE)
+        self.assertEqual(prob.status, cp.OPTIMAL)
+        ref = cp.Problem(cp.Minimize(cp.sum_squares(X)), [(X @ v) @ w >= 1])
+        ref.solve(solver=SOLVER)
+        self.assertAlmostEqual(prob.value, ref.value, places=5)
+
+        A = rng.standard_normal((3, 4))
+        y = cp.Variable(4)
+        c = rng.standard_normal(3)
+        prob2 = cp.Problem(cp.Minimize((A @ y) @ c + cp.sum_squares(y)))
+        prob2.solve(solver=SOLVER, canon_backend=DIFFENGINE)
+        self.assertEqual(prob2.status, cp.OPTIMAL)
+        ref2 = cp.Problem(cp.Minimize((A @ y) @ c + cp.sum_squares(y)))
+        ref2.solve(solver=SOLVER)
+        self.assertAlmostEqual(prob2.value, ref2.value, places=5)
+
     def test_quad_objective_data_matches_cpp(self) -> None:
         """The extractor's Hessian path must produce the same stuffed
         (P, q, A) as the default CPP backend."""

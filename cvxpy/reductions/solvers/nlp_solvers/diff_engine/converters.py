@@ -89,6 +89,12 @@ def _normalize_matmul(expr):
     """Reassociate ``expr`` when a matmul chain ends in a plain-constant
     factor. General matrix-chain reordering is deliberately not attempted."""
     left, right = expr.args
+    # Reassociation is only valid while every intermediate stays 2-D: a 1-D
+    # operand contracts to an inner product under numpy's matmul rules, and
+    # (a @ b) @ c != a @ (b @ c) across that collapse (the rewritten factor
+    # can be shape-invalid). A 2-D left guarantees both its factors are 2-D.
+    if len(left.shape) != 2:
+        return expr
     if _is_plain_constant(right) and not left.is_constant():
         return _apply_constant_right(left, right)
     return expr
