@@ -1066,6 +1066,12 @@ class Problem(u.Canonical):
                     s.DEFAULT_CANON_BACKEND if canon_backend is None else canon_backend)
         if requires_grad:
             dpp_context = 'dgp' if gp else 'dcp'
+            if canon_backend == s.DIFFENGINE_CANON_BACKEND:
+                # DiffengineConeProgram does not implement the differentiation
+                # interface (apply_param_jac/split_adjoint, zero_offset).
+                raise ValueError(
+                    "When requires_grad is True, the DIFFENGINE "
+                    "canonicalization backend is not supported.")
             if qcp:
                 raise ValueError("Cannot compute gradients of DQCP problems.")
             elif not self.is_dpp(dpp_context):

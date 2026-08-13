@@ -226,6 +226,30 @@ class TestDiffengineConverter(BaseTest):
         ref2.solve(solver=SOLVER)
         self.assertAlmostEqual(prob2.value, ref2.value, places=5)
 
+    def test_requires_grad_rejected(self) -> None:
+        """DiffengineConeProgram lacks the differentiation interface
+        (apply_param_jac/split_adjoint, zero_offset), so requires_grad must be
+        rejected up front instead of returning silently wrong derivatives."""
+        x = cp.Variable(2)
+        p = cp.Parameter(2)
+        p.value = np.ones(2)
+        prob = cp.Problem(cp.Minimize(cp.sum_squares(x - p)))
+        with self.assertRaisesRegex(ValueError, "DIFFENGINE"):
+            prob.solve(requires_grad=True, canon_backend=DIFFENGINE)
+
+    def test_split_solution_plain_variables(self) -> None:
+        """split_solution mirrors ParamConeProg: plain id -> reshaped slice."""
+        x = cp.Variable((2, 2))
+        prob = cp.Problem(cp.Minimize(cp.sum_squares(x - np.eye(2))))
+        data, _, _ = prob.get_problem_data(SOLVER, canon_backend=DIFFENGINE)
+        param_prog = data[s.PARAM_PROB]
+        col = param_prog.var_id_to_col[x.id]
+        sltn = np.zeros(param_prog.x.size)
+        sltn[col:col + 4] = np.arange(4.0)
+        out = param_prog.split_solution(sltn)
+        self.assertItemsAlmostEqual(
+            out[x.id], np.arange(4.0).reshape((2, 2), order='F'))
+
     def test_parametric_variable_bounds_raise_clearly(self) -> None:
         """Parametric bounds need the lb/ub-tensor path the DIFFENGINE branch
         bypasses; they must fail loudly, not crash in the numeric extractor."""

@@ -174,7 +174,8 @@ class DiffengineConeProgram(ParamProb):
         return new_prog
 
     def split_solution(self, sltn, active_vars=None):
-        from cvxpy.reductions import cvx_attr2constr
+        """Splits the solution into individual variables (mirrors
+        ParamConeProg.split_solution)."""
         if active_vars is None:
             active_vars = [v.id for v in self.variables]
         sltn_dict = {}
@@ -182,15 +183,7 @@ class DiffengineConeProgram(ParamProb):
             if var_id in active_vars:
                 var = self.id_to_var[var_id]
                 value = sltn[col:var.size + col]
-                if var.attributes_were_lowered():
-                    orig_var = var.leaf_of_provenance()
-                    value = cvx_attr2constr.recover_value_for_leaf(
-                        orig_var, value, project=False)
-                    sltn_dict[orig_var.id] = np.reshape(
-                        value, orig_var.shape, order='F')
-                else:
-                    sltn_dict[var_id] = np.reshape(
-                        value, var.shape, order='F')
+                sltn_dict[var_id] = np.reshape(value, var.shape, order='F')
         return sltn_dict
 
     @classmethod
