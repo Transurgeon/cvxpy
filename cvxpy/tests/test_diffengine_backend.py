@@ -523,6 +523,23 @@ class TestDiffengineSelection(BaseTest):
                 SOLVER, canon_backend=s.SCIPY_CANON_BACKEND)
             self.assertNotEqual(self._stuffing_backend(chain), DIFFENGINE)
 
+    def test_env_var_selects_diffengine_on_non_dpp_path(self) -> None:
+        """The env default must also apply to ignore_dpp / non-DPP solves —
+        settings documents DIFFENGINE for exactly those — instead of silently
+        falling back to the CPP tensor pipeline."""
+        with mock.patch.dict(
+                os.environ,
+                {"CVXPY_DEFAULT_CANON_BACKEND": DIFFENGINE}):
+            p = cp.Parameter()
+            p.value = 2.0
+            x = cp.Variable()
+            prob = cp.Problem(cp.Minimize(cp.square(x - p * p)))  # not DPP
+            self.assertFalse(prob.is_dpp())
+            prob.solve(solver=SOLVER, ignore_dpp=True)
+            self.assertEqual(self._stuffing_backend(prob._cache.solving_chain),
+                             DIFFENGINE)
+            self.assertAlmostEqual(x.value, 4.0, places=4)
+
     def test_nd_problem_explicit_diffengine_raises(self) -> None:
         x = cp.Variable((2, 2, 2))
         prob = cp.Problem(cp.Minimize(cp.sum_squares(x)))

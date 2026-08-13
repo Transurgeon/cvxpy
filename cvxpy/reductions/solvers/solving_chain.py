@@ -212,6 +212,18 @@ def _build_solving_chain(
             f"The {DIFFENGINE_CANON_BACKEND} backend cannot be used with "
             "problems that have expressions of dimension greater than 2.")
 
+    # DIFFENGINE dispatch lives in ConeMatrixStuffing, before the tensor
+    # pipeline consumes the env var, so resolve the DIFFENGINE default here —
+    # on both branches, since settings documents it for ignore_dpp/non-DPP
+    # solves too. N-D problems fall through to the normal (SCIPY-fallback)
+    # selection; DIFFCP is excluded because it needs the DPP-tensor
+    # differentiation contract DiffengineConeProgram does not implement.
+    if (canon_backend is None
+            and canonInterface.get_default_canon_backend() == DIFFENGINE_CANON_BACKEND
+            and problem._max_ndim() <= 2
+            and solver_instance.name() != s.DIFFCP):
+        canon_backend = DIFFENGINE_CANON_BACKEND
+
     if ignore_dpp or not is_dpp:
         if not ignore_dpp and enforce_dpp:
             raise DPPError(DPP_ERROR_MSG)
@@ -220,16 +232,9 @@ def _build_solving_chain(
         reductions = [EvalParams()] + reductions
     else:
         if canon_backend is None:
-            # DIFFENGINE dispatch lives in ConeMatrixStuffing, before the
-            # tensor pipeline consumes the env var, so resolve it here.
-            # N-D problems fall through to the normal (SCIPY-fallback) selection.
-            if (canonInterface.get_default_canon_backend() == DIFFENGINE_CANON_BACKEND
-                    and problem._max_ndim() <= 2):
-                canon_backend = DIFFENGINE_CANON_BACKEND
-            else:
-                total_param_size = sum(p.size for p in problem.parameters())
-                if total_param_size >= DPP_PARAM_THRESHOLD:
-                    canon_backend = COO_CANON_BACKEND
+            total_param_size = sum(p.size for p in problem.parameters())
+            if total_param_size >= DPP_PARAM_THRESHOLD:
+                canon_backend = COO_CANON_BACKEND
 
     # --- Canonicalization reductions (problem_form + solver_context) ---
     use_quad = True if solver_opts is None else solver_opts.get('use_quad_obj', True)
