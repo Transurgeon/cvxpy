@@ -203,6 +203,9 @@ def convert_symbolic_quad_form(expr, var_dict, n_vars, param_dict):
                 P_val = sparse.csr_array(P_dense)
         if sparse.issparse(P_val):
             P_csr = P_val.tocsr()
+            # Explicitly stored zeros (e.g. from scipy block_diag of dense
+            # blocks) would inflate the Hessian pattern the engine derives.
+            P_csr.eliminate_zeros()
             return _diffengine.make_quad_form(
                 None, x_c, "sparse",
                 P_csr.data.astype(np.float64),
