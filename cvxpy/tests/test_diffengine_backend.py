@@ -226,6 +226,19 @@ class TestDiffengineConverter(BaseTest):
         ref2.solve(solver=SOLVER)
         self.assertAlmostEqual(prob2.value, ref2.value, places=5)
 
+    def test_parametric_divisor_zero_raises(self) -> None:
+        """A parametric divisor whose current value contains 0 must fail
+        loudly at conversion, like the constant branch, instead of feeding
+        inf into the engine's gradients."""
+        from cvxpy.reductions.solvers.nlp_solvers.diff_engine.registry import (
+            convert_div,
+        )
+        x = cp.Variable(3)
+        p = cp.Parameter(3)
+        p.value = np.array([1.0, 0.0, 2.0])
+        with self.assertRaisesRegex(ValueError, "[Dd]ivision by zero"):
+            convert_div(x / p, [None, None])
+
     def test_requires_grad_rejected(self) -> None:
         """DiffengineConeProgram lacks the differentiation interface
         (apply_param_jac/split_adjoint, zero_offset), so requires_grad must be

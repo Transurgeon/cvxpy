@@ -93,6 +93,13 @@ def convert_div(expr, children):
     """
     divisor_expr = expr.args[1]
     if divisor_expr.parameters():
+        # The engine re-evaluates make_power(d, -1) each solve; check the
+        # current value here so a zero divisor fails loudly at conversion
+        # like the constant branch does. A zero introduced by a later
+        # parameter update still surfaces as inf from the engine.
+        div_val = divisor_expr.value
+        if div_val is not None and np.any(to_dense_float(div_val) == 0):
+            raise ValueError("Division by zero encountered in divisor")
         recip_node = _diffengine.make_power(children[1], -1.0)
         size = divisor_expr.size
     else:
