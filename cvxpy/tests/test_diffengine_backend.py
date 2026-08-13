@@ -249,6 +249,16 @@ class TestDiffengineConverter(BaseTest):
         self.assertItemsAlmostEqual(
             data["P"].toarray(), data_cpp["P"].toarray(), places=10)
 
+    def test_sparse_P_explicit_zeros_dropped(self) -> None:
+        """Explicitly stored zeros in an already-sparse constant P (e.g. from
+        scipy block_diag of dense blocks) do not inflate the stuffed pattern."""
+        blocks = [np.diag([1.0, 2.0]) for _ in range(5)]  # 2 stored zeros each
+        P0 = sp.block_diag(blocks, format="csr")
+        self.assertEqual(P0.nnz, 20)  # explicit zeros are stored
+        data, _, _ = self._quad_form_problem(P0).get_problem_data(
+            SOLVER, canon_backend=DIFFENGINE)
+        self.assertEqual(data["P"].nnz, 10)
+
     def test_density_route_values_match_dense_route(self) -> None:
         """The sparse route produces the same stuffed P values as the dense
         route it replaces (forced by zeroing the density threshold)."""
