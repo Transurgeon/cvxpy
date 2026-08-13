@@ -226,6 +226,16 @@ class TestDiffengineConverter(BaseTest):
         ref2.solve(solver=SOLVER)
         self.assertAlmostEqual(prob2.value, ref2.value, places=5)
 
+    def test_parametric_variable_bounds_raise_clearly(self) -> None:
+        """Parametric bounds need the lb/ub-tensor path the DIFFENGINE branch
+        bypasses; they must fail loudly, not crash in the numeric extractor."""
+        lb = cp.Parameter(2)
+        lb.value = np.array([0.5, 0.5])
+        x = cp.Variable(2, bounds=[lb, 10])
+        prob = cp.Problem(cp.Minimize(cp.sum(x)))
+        with self.assertRaisesRegex(NotImplementedError, "parametric variable bounds"):
+            prob.get_problem_data(cp.SCIPY, canon_backend=DIFFENGINE)
+
     def test_quad_objective_data_matches_cpp(self) -> None:
         """The extractor's Hessian path must produce the same stuffed
         (P, q, A) as the default CPP backend."""

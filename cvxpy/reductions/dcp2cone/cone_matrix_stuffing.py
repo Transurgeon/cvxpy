@@ -468,6 +468,13 @@ class ConeMatrixStuffing(MatrixStuffing):
             from cvxpy.reductions.dcp2cone.diffengine_cone_program import (
                 DiffengineConeProgram,
             )
+            if _has_parametric_bounds(problem.variables()):
+                # The lb/ub-tensor path below is DPP-tensor machinery this
+                # branch bypasses; without it, Expression bounds would crash
+                # (or freeze) inside the numeric bound extractors.
+                raise NotImplementedError(
+                    f"The {s.DIFFENGINE_CANON_BACKEND} canonicalization "
+                    "backend does not support parametric variable bounds.")
             new_prob = DiffengineConeProgram.from_problem(
                 problem, ordered_cons, inverse_data, self.quad_obj)
             return new_prob, inverse_data
