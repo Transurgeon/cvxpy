@@ -166,8 +166,9 @@ def convert_symbolic_quad_form(expr, var_dict, n_vars, param_dict):
     """Convert a SymbolicQuadForm (Dcp2Cone quadratic-objective placeholder).
 
     Scalar x'Px (QuadForm / quad_over_lin / sum_squares) uses the native quad_form
-    binding -- the sparse path for a sparse constant P, the dense path for a dense or
-    parametric P. power/PowerApprox is the elementwise square, lowered to multiply.
+    binding -- the sparse path for a constant P that is sparse-stored or mostly zeros,
+    the dense path for a genuinely dense or parametric P. power/PowerApprox is the
+    elementwise square, lowered to multiply.
     """
     if expr.block_indices is not None:
         raise NotImplementedError(
@@ -191,6 +192,15 @@ def convert_symbolic_quad_form(expr, var_dict, n_vars, param_dict):
             P_c = convert_expr(P_inner, var_dict, n_vars, param_dict)
             return _diffengine.make_quad_form(P_c, x_c, "dense", None, n)
         P_val = P.value
+        if not sparse.issparse(P_val):
+            P_dense = to_dense_float(P_val)
+            # A constant dense P that is mostly zeros: route it to the sparse
+            # quad_form binding to avoid building a dense Hessian block.
+            # Mirrors convert_matmul; constants only, so no parametric sparsity
+            # pattern is ever frozen (parametric P took the branch above).
+            density = np.count_nonzero(P_dense) / P_dense.size if P_dense.size else 1.0
+            if density < s.SPARSE_DENSITY_THRESHOLD:
+                P_val = sparse.csr_array(P_dense)
         if sparse.issparse(P_val):
             P_csr = P_val.tocsr()
             return _diffengine.make_quad_form(
@@ -199,7 +209,6 @@ def convert_symbolic_quad_form(expr, var_dict, n_vars, param_dict):
                 P_csr.indices.astype(np.int32),
                 P_csr.indptr.astype(np.int32),
                 P_csr.shape[0], P_csr.shape[1])
-        P_dense = to_dense_float(P_val)
         return _diffengine.make_quad_form(
             None, x_c, "dense", P_dense.flatten(order='F'), n)
 
