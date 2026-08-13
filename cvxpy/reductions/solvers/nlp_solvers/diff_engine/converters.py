@@ -227,16 +227,11 @@ def convert_expr(expr, var_dict, n_vars, param_dict=None):
     if isinstance(expr, cp.Parameter):
         return param_dict[expr.id]
 
-    # Base case: constant (in the diff engine, a constant is a parameter with ID -1)
-    if isinstance(expr, cp.Constant):
-        c = to_dense_float(expr.value)
-        d1, d2 = normalize_shape(expr.shape)
-        return _diffengine.make_parameter(d1, d2, -1, n_vars, c.flatten(order='F'))
-
-    # Fully-constant subtree: evaluate numerically instead of recursing.
+    # Base case: a Constant leaf or fully-constant subtree, evaluated
+    # numerically (in the diff engine, a constant is a parameter with ID -1).
     # Dcp2Cone does not canonicalize constant subtrees, so nonlinear atoms
     # over plain constants can reach the converter.
-    if not expr.variables() and not expr.parameters():
+    if _is_plain_constant(expr):
         c = to_dense_float(expr.value)
         d1, d2 = normalize_shape(expr.shape)
         return _diffengine.make_parameter(d1, d2, -1, n_vars, c.flatten(order='F'))

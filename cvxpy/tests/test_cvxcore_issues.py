@@ -18,6 +18,7 @@ DIFFENGINE canon backend (explicit ``canon_backend``). Each test is a
 scaled-down version of a reported bug's reproduction.
 """
 import numpy as np
+from scipy import sparse
 from scipy.linalg import dft
 
 import cvxpy as cp
@@ -131,8 +132,6 @@ class TestCvxcoreIssues(BaseTest):
     def test_quantum_kron_partial_transpose_structure(self) -> None:
         """quantum_hilbert_matrix benchmark structure at toy scale: locks the
         sparse-kron active-block path and the block matmul sparsity path."""
-        from scipy import sparse
-
         dim = 2
         rng = np.random.default_rng(0)
         X = cp.Variable((dim * dim, dim * dim), symmetric=True)

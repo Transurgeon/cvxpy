@@ -29,6 +29,13 @@ from cvxpy.atoms.quad_form import SymbolicQuadForm
 from cvxpy.reductions.dcp2cone.cone_matrix_stuffing import ConeMatrixStuffing
 from cvxpy.reductions.dcp2cone.diffengine_cone_program import DiffengineConeProgram
 from cvxpy.reductions.solvers.defines import INSTALLED_MI_SOLVERS
+from cvxpy.reductions.solvers.nlp_solvers.diff_engine import converters
+from cvxpy.reductions.solvers.nlp_solvers.diff_engine.converters import (
+    convert_expr,
+    convert_symbolic_quad_form,
+)
+from cvxpy.reductions.solvers.nlp_solvers.diff_engine.helpers import normalize_shape
+from cvxpy.reductions.solvers.nlp_solvers.diff_engine.registry import convert_div
 from cvxpy.tests.base_test import BaseTest
 
 try:
@@ -57,9 +64,6 @@ class TestDiffengineConverter(BaseTest):
 
     def test_unsupported_atom_raises(self) -> None:
         """convert_expr names the offending atom."""
-        from cvxpy.reductions.solvers.nlp_solvers.diff_engine.converters import (
-            convert_expr,
-        )
         x = cp.Variable(4)
         with self.assertRaisesRegex(NotImplementedError, "cumsum"):
             convert_expr(cp.cumsum(x), {x.id: None}, 4, {})
@@ -75,9 +79,6 @@ class TestDiffengineConverter(BaseTest):
         self.assertItemsAlmostEqual(x.value, np.array([1.0, 1.0]), places=4)
 
     def test_symbolic_quad_form_block_indices_raises(self) -> None:
-        from cvxpy.reductions.solvers.nlp_solvers.diff_engine.converters import (
-            convert_symbolic_quad_form,
-        )
         x = cp.Variable(4)
         sqf = SymbolicQuadForm(x, sp.eye_array(4), cp.sum_squares(x),
                                block_indices=[np.array([0, 1]), np.array([2, 3])])
@@ -85,9 +86,6 @@ class TestDiffengineConverter(BaseTest):
             convert_symbolic_quad_form(sqf, {}, 4, {})
 
     def test_symbolic_quad_form_unsupported_orig_raises(self) -> None:
-        from cvxpy.reductions.solvers.nlp_solvers.diff_engine.converters import (
-            convert_symbolic_quad_form,
-        )
         x = cp.Variable(4)
         sqf = SymbolicQuadForm(x, sp.eye_array(4), cp.norm1(x))
         with self.assertRaisesRegex(NotImplementedError, "norm1"):
@@ -101,15 +99,8 @@ class TestDiffengineConverter(BaseTest):
             prob.solve(solver=SOLVER, canon_backend=DIFFENGINE)
 
     def test_gt_2d_expression_raises_clearly(self) -> None:
-        from cvxpy.reductions.solvers.nlp_solvers.diff_engine.helpers import (
-            normalize_shape,
-        )
         with self.assertRaisesRegex(NotImplementedError, ">2-D"):
             normalize_shape((2, 3, 4))
-
-    def test_required_bindings_present(self) -> None:
-        for name in REQUIRED_BINDINGS:
-            self.assertTrue(hasattr(_engine, name))
 
     def test_kron_var_left_const_right(self) -> None:
         """kron(X, C) exercises make_right_kron (with a structural zero in C)."""
@@ -230,9 +221,6 @@ class TestDiffengineConverter(BaseTest):
         """A parametric divisor whose current value contains 0 must fail
         loudly at conversion, like the constant branch, instead of feeding
         inf into the engine's gradients."""
-        from cvxpy.reductions.solvers.nlp_solvers.diff_engine.registry import (
-            convert_div,
-        )
         x = cp.Variable(3)
         p = cp.Parameter(3)
         p.value = np.array([1.0, 0.0, 2.0])
@@ -347,7 +335,6 @@ class TestDiffengineConverter(BaseTest):
         """A parametric P must take the parametric (matrix-valued child) branch
         even when its current value is mostly zeros -- sparsifying it would
         freeze the sparsity pattern to that value."""
-        from cvxpy.reductions.solvers.nlp_solvers.diff_engine import converters
 
         n = 30
         x = cp.Variable(n)

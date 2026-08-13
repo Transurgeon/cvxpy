@@ -26,6 +26,8 @@ from sparsediffpy import _sparsediffengine as _diffengine
 from cvxpy.reductions.solvers.nlp_solvers.diff_engine.helpers import (
     chain_add,
     make_constant_quad_form,
+    make_sparse_left_matmul,
+    make_sparse_right_matmul,
     normalize_shape,
     to_dense_float,
 )
@@ -265,10 +267,6 @@ def convert_diag_vec(expr, children):
     k = expr.k
     if k == 0:
         return node
-    from cvxpy.reductions.solvers.nlp_solvers.diff_engine.helpers import (
-        make_sparse_left_matmul,
-        make_sparse_right_matmul,
-    )
     n = expr.args[0].size
     m = n + abs(k)
     rows = np.arange(n)
