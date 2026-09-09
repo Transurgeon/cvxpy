@@ -20,6 +20,8 @@ from cvxpy.atoms.affine.diag import diag
 from cvxpy.atoms.affine.vec import vec
 from cvxpy.expressions.variable import Variable
 from cvxpy.problems.objective import Maximize, Minimize
+from cvxpy.reductions.eval_params import EvalParams
+from cvxpy.settings import CPP_CANON_BACKEND
 from cvxpy.utilities.perspective_utils import form_cone_constraint
 from cvxpy.utilities.solver_context import SolverInfo
 
@@ -30,11 +32,18 @@ def perspective_canon(expr, args, solver_context: SolverInfo | None = None):
     # Only working for minimization right now.
 
     aux_prob = Problem((Minimize if expr.f.is_convex() else Maximize)(expr.f))
+    if aux_prob.parameters():
+        # Substitute the values here: the chain below keeps parameters
+        # symbolic now, but this canonicalizer needs concrete tensors.
+        aux_prob, _ = EvalParams().apply(aux_prob)
     # Does numerical solution value of epigraph t coincide with expr.f numerical
     # value at opt?
     solver_opts = {"use_quad_obj": False}
     solver = solver_context.solver_name if solver_context is not None else None
-    chain = aux_prob._construct_chain(solver=solver, solver_opts=solver_opts, ignore_dpp=True)
+    # Pin to CPP: this aux chain unpacks the raw .q/.A tensors below, so it
+    # must not ride backend-default changes.
+    chain = aux_prob._construct_chain(solver=solver, solver_opts=solver_opts, ignore_dpp=True,
+                                      canon_backend=CPP_CANON_BACKEND)
     chain.reductions = chain.reductions[:-1]  # skip solver reduction
     prob_canon = chain.apply(aux_prob)[0]  # grab problem instance
     # get cone representation of c, A, and b for some problem.
