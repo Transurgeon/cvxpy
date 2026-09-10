@@ -31,6 +31,7 @@ from cvxpy.reductions.dcp2cone.cone_matrix_stuffing import (
 from cvxpy.reductions.eval_params import EvalParams
 from cvxpy.reductions.fold_callback_params import CallbackParamFold
 from cvxpy.reductions.solvers.defines import INSTALLED_MI_SOLVERS
+from cvxpy.reductions.solvers.nlp_solvers.diff_engine import parametric_program
 from cvxpy.reductions.solvers.nlp_solvers.diff_engine.parametric_program import (
     DiffengineParamConeProg,
 )
@@ -673,3 +674,102 @@ class TestIgnoreDppCacheHygiene(BaseTest):
         prob_de.solve(solver=SOLVER, ignore_dpp=True)
         self.assertAlmostEqual(x.value, -3.0)
         self.assertAlmostEqual(y.value, -6.0)
+
+
+class TestDiffengineTensors(BaseTest):
+    """DiffengineParamConeProg holds concrete matrices; ParamConeProg's
+    coefficient tensors are an encoding of them, built only when read."""
+
+    @staticmethod
+    def _least_squares(rng, quad_obj: bool):
+        m, n = 8, 4
+        A = cp.Parameter((m, n))
+        b = cp.Parameter(m)
+        x = cp.Variable(n)
+        # A @ A.T @ A is nonlinear in A, so the problem is not DPP.
+        resid = A @ A.T @ A @ x - b
+        obj = cp.sum_squares(resid) if quad_obj else cp.norm1(resid)
+        prob = cp.Problem(cp.Minimize(obj), [x >= -10])
+        A.value = rng.standard_normal((m, n))
+        b.value = rng.standard_normal(m)
+        return prob, A, b, x
+
+    def test_solve_path_never_encodes_tensors(self) -> None:
+        """No solve, first or cached, may encode the tensors: the solver
+        interfaces read apply_parameters' return values and ask
+        has_quad_obj."""
+        rng = np.random.default_rng(0)
+        for quad_obj in (False, True):
+            prob, A, b, x = self._least_squares(rng, quad_obj)
+            with mock.patch.object(
+                    parametric_program, 'encode_cone_tensors',
+                    side_effect=parametric_program.encode_cone_tensors) as spy:
+                for _ in range(3):
+                    A.value = rng.standard_normal(A.shape)
+                    b.value = rng.standard_normal(b.shape)
+                    prob.solve(solver=SOLVER, ignore_dpp=True)
+                    self.assertEqual(prob.status, cp.OPTIMAL)
+                    # Same problem solved from the concrete values.
+                    y = cp.Variable(x.size)
+                    resid = A.value @ A.value.T @ A.value @ y - b.value
+                    ref_obj = cp.sum_squares(resid) if quad_obj else cp.norm1(resid)
+                    ref = cp.Problem(cp.Minimize(ref_obj), [y >= -10])
+                    ref.solve(solver=SOLVER)
+                    self.assertAlmostEqual(prob.value, ref.value, places=4)
+                self.assertEqual(spy.call_count, 0)
+
+    def test_tensors_reflect_the_current_extraction(self) -> None:
+        """Tensors read once, then re-read after a re-solve, must encode that
+        solve's matrices rather than serving the cached earlier ones.
+        ExtractDirectCones reads them, and reads reduced_A twice expecting the
+        same object."""
+        rng = np.random.default_rng(1)
+        prob, A, b, _ = self._least_squares(rng, quad_obj=False)
+        prob.solve(solver=SOLVER, ignore_dpp=True)
+        prog = prob._cache.param_prog
+        self.assertIsInstance(prog, DiffengineParamConeProg)
+
+        with mock.patch.object(
+                parametric_program, 'encode_cone_tensors',
+                side_effect=parametric_program.encode_cone_tensors) as spy:
+            # Materialize the tensors, so a re-solve has a cache to invalidate.
+            first_A = prog.A.toarray()
+            first_reduced_A = prog.reduced_A
+            self.assertEqual(spy.call_count, 1)  # ... and encoded once, lazily
+            self.assertIs(prog.reduced_A, first_reduced_A)  # one per extraction
+            self.assertIs(prog.reduced_P, prog.reduced_P)
+
+            A.value = rng.standard_normal(A.shape)
+            b.value = rng.standard_normal(b.shape)
+            prob.solve(solver=SOLVER, ignore_dpp=True)
+            self.assertIs(prob._cache.param_prog, prog)  # cached fast path
+            self.assertEqual(spy.call_count, 1)  # the solve itself encodes not
+
+            # Values are unchanged since the solve, so this returns the
+            # matrices the tensors must now agree with.
+            q, d, A_mat, b_vec = prog.apply_parameters()
+            # q holds [q; d]; A holds [A | b], flattened column-major.
+            self.assertItemsAlmostEqual(prog.q.toarray().flatten(),
+                                        np.append(q, d))
+            decoded = prog.A.toarray().reshape(
+                (prog.constr_size, prog.x.size + 1), order='F')
+            self.assertItemsAlmostEqual(decoded[:, :-1], A_mat.toarray())
+            self.assertItemsAlmostEqual(decoded[:, -1], b_vec)
+            self.assertEqual(spy.call_count, 2)  # re-encoded for this solve
+            self.assertIsNot(prog.reduced_A, first_reduced_A)
+        self.assertFalse(np.allclose(prog.A.toarray(), first_A))
+
+    def test_has_quad_obj_needs_no_tensor(self) -> None:
+        """has_quad_obj answers from the concrete matrices, so the read that
+        every ConicSolver.apply performs encodes nothing."""
+        rng = np.random.default_rng(2)
+        for quad_obj in (False, True):
+            prob, _, _, _ = self._least_squares(rng, quad_obj)
+            prob.solve(solver=SOLVER, ignore_dpp=True)
+            prog = prob._cache.param_prog
+            with mock.patch.object(
+                    parametric_program, 'encode_cone_tensors',
+                    side_effect=parametric_program.encode_cone_tensors) as spy:
+                self.assertEqual(prog.has_quad_obj, quad_obj)
+                self.assertEqual(spy.call_count, 0)
+            self.assertEqual(prog.P is not None, quad_obj)
