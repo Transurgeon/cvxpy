@@ -15,6 +15,8 @@ limitations under the License.
 
 Shared helpers for converting CVXPY expressions to C diff engine expressions.
 """
+import os
+
 import numpy as np
 from scipy import sparse
 from sparsediffpy import _sparsediffengine as _diffengine
@@ -58,7 +60,19 @@ def make_sparse_left_matmul(param_node, child, A):
         A.shape[0], A.shape[1])
 
 
+def dense_disabled():
+    """Ablation switch: DIFFENGINE_NO_DENSE=1 routes every constant matrix to the
+    sparse CSR bindings, so the engine builds no permuted dense blocks from
+    constant data. Read on every call so a benchmark can toggle it in-process.
+    Parametric matrices keep the dense path: sparsifying one would freeze its
+    sparsity pattern to the current value.
+    """
+    return os.environ.get("DIFFENGINE_NO_DENSE", "0") == "1"
+
+
 def make_dense_left_matmul(param_node, child, A):
+    if param_node is None and dense_disabled():
+        return make_sparse_left_matmul(None, child, sparse.csr_array(A))
     m, n = A.shape
     return _diffengine.make_left_matmul(
         param_node, child, 'dense', A.flatten(order='C'), m, n)
@@ -76,6 +90,8 @@ def make_sparse_right_matmul(param_node, child, A):
 
 
 def make_dense_right_matmul(param_node, child, A):
+    if param_node is None and dense_disabled():
+        return make_sparse_right_matmul(None, child, sparse.csr_array(A))
     m, n = A.shape
     return _diffengine.make_right_matmul(
         param_node, child, 'dense', A.flatten(order='C'), m, n)
@@ -93,7 +109,7 @@ def make_constant_quad_form(x_c, P_val, n):
     if not sparse.issparse(P_val):
         P_dense = to_dense_float(P_val)
         density = np.count_nonzero(P_dense) / P_dense.size if P_dense.size else 1.0
-        if density >= s.SPARSE_DENSITY_THRESHOLD:
+        if density >= s.SPARSE_DENSITY_THRESHOLD and not dense_disabled():
             return _diffengine.make_quad_form(
                 None, x_c, "dense", P_dense.flatten(order='F'), n)
         P_val = sparse.csr_array(P_dense)

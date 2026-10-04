@@ -15,10 +15,44 @@ limitations under the License.
 """
 from __future__ import annotations
 
+import os
+import time
+from contextlib import contextmanager
+
 import numpy as np
 import scipy.sparse as sp
 
 from cvxpy.reductions.solvers.nlp_solvers.diff_engine.c_problem import C_problem
+
+# Benchmark instrumentation (thesis ablation branch). With DIFFENGINE_PROFILE=1,
+# every phase below adds its wall-clock time to PHASE_TIMES; a benchmark resets
+# the dict before a measured call and reads it after. The phases:
+#   convert   -- CVXPY expressions -> C expression trees (make_problem)
+#   symbolic  -- sparsity patterns, block layouts and index maps (init_*)
+#   numeric   -- values: forward passes, Jacobian and Hessian values
+#   assemble  -- scipy COO -> CSC of A and P
+#   format    -- the cone row layout (cone_program._restructure)
+PHASE_TIMES: dict[str, float] = {}
+
+
+@contextmanager
+def phase(name):
+    if os.environ.get("DIFFENGINE_PROFILE", "0") != "1":
+        yield
+        return
+    t0 = time.perf_counter()
+    try:
+        yield
+    finally:
+        PHASE_TIMES[name] = PHASE_TIMES.get(name, 0.0) + time.perf_counter() - t0
+
+
+def rebuild_every_solve():
+    """Ablation switch: DIFFENGINE_REBUILD=1 discards the cached engine problem
+    on every parameter update and repeats the conversion and the symbolic pass,
+    i.e. the engine without its symbolic/numeric split. Read on every call.
+    """
+    return os.environ.get("DIFFENGINE_REBUILD", "0") == "1"
 
 
 def _build_jacobian_csc(c_problem, jac_structure, m, n_vars):
@@ -26,13 +60,15 @@ def _build_jacobian_csc(c_problem, jac_structure, m, n_vars):
     if m == 0:
         return sp.csc_matrix((0, n_vars))
     rows, cols = jac_structure
-    vals = c_problem.eval_jacobian_vals()
+    with phase("numeric"):
+        vals = c_problem.eval_jacobian_vals()
     # The engine reports *structural* sparsity, which for an affine map is a
     # superset of the coefficient pattern; keep only the true nonzeros so the
     # downstream O(nnz) passes are not paying for explicit zeros.
-    keep = vals != 0
-    return sp.coo_matrix((vals[keep], (rows[keep], cols[keep])),
-                         shape=(m, n_vars)).tocsc()
+    with phase("assemble"):
+        keep = vals != 0
+        return sp.coo_matrix((vals[keep], (rows[keep], cols[keep])),
+                             shape=(m, n_vars)).tocsc()
 
 
 def _full_symmetric_hess_structure(rows, cols, n_vars):
@@ -57,9 +93,11 @@ def _build_hessian_csc(c_problem, hess_structure, duals):
     the off-diagonal entries to form the full symmetric matrix the cone solvers expect.
     """
     full_rows, full_cols, offdiag, shape = hess_structure
-    vals = c_problem.eval_hessian_vals_coo_lower_tri(1.0, duals)
-    full_vals = np.concatenate([vals, vals[offdiag]])
-    return sp.csc_matrix((full_vals, (full_rows, full_cols)), shape=shape)
+    with phase("numeric"):
+        vals = c_problem.eval_hessian_vals_coo_lower_tri(1.0, duals)
+    with phase("assemble"):
+        full_vals = np.concatenate([vals, vals[offdiag]])
+        return sp.csc_matrix((full_vals, (full_rows, full_cols)), shape=shape)
 
 
 class DiffEngineExtractor:
@@ -82,24 +120,39 @@ class DiffEngineExtractor:
         ``constraint_exprs`` is the flat list of cone-constraint argument expressions.
         Returns ``self`` for chaining.
         """
+        self._build_args = (objective_expr, constraint_exprs, parameters, quad_obj)
         self.has_constraints = bool(constraint_exprs)
-        self.c_problem = C_problem(
-            objective_expr, constraint_exprs, self.inverse_data,
-            parameters=parameters, verbose=False)
-        self.c_problem.init_jacobian_coo()
-        self.jac_structure = (self.c_problem.get_jacobian_sparsity_coo()
-                              if self.has_constraints else None)
-        if quad_obj:
-            # Capture the (fixed) lower-triangular Hessian sparsity once; re-solves then
-            # fetch values only and mirror to full symmetric (see _build_hessian_csc).
-            self.c_problem.init_hessian_coo_lower_tri()
-            rows, cols = self.c_problem.get_problem_hessian_sparsity_coo()
-            self.hess_structure = _full_symmetric_hess_structure(rows, cols, self.n_vars)
+        with phase("convert"):
+            self.c_problem = C_problem(
+                objective_expr, constraint_exprs, self.inverse_data,
+                parameters=parameters, verbose=False)
+        with phase("symbolic"):
+            self.c_problem.init_jacobian_coo()
+            self.jac_structure = (self.c_problem.get_jacobian_sparsity_coo()
+                                  if self.has_constraints else None)
+            if quad_obj:
+                # Capture the (fixed) lower-triangular Hessian sparsity once; re-solves
+                # then fetch values only and mirror to full symmetric (see
+                # _build_hessian_csc).
+                self.c_problem.init_hessian_coo_lower_tri()
+                rows, cols = self.c_problem.get_problem_hessian_sparsity_coo()
+                self.hess_structure = _full_symmetric_hess_structure(
+                    rows, cols, self.n_vars)
         return self
+
+    def rebuild(self) -> None:
+        """Discard the engine problem and build it again from the same expressions
+        (conversion and symbolic pass). Used only by the DIFFENGINE_REBUILD ablation.
+        """
+        self.c_problem = None
+        self.build(*self._build_args)
 
     def update_parameters(self, theta: np.ndarray) -> None:
         """Push new (flattened, concatenated) parameter values into the C problem."""
-        self.c_problem.update_params(theta)
+        if rebuild_every_solve():
+            self.rebuild()
+        with phase("numeric"):
+            self.c_problem.update_params(theta)
 
     def extract(self, quad_obj: bool):
         """Evaluate the (affine) objective and constraints at ``x = 0`` to recover the
@@ -107,10 +160,12 @@ class DiffEngineExtractor:
         ``b``, and (for a quadratic objective) the Hessian ``P``. Pre-restructuring.
         """
         x0 = np.zeros(self.n_vars, dtype=np.float64)
-        d = float(self.c_problem.objective_forward(x0))
-        q = self.c_problem.gradient().copy()
+        with phase("numeric"):
+            d = float(self.c_problem.objective_forward(x0))
+            q = self.c_problem.gradient().copy()
         if self.has_constraints:
-            b_vec = self.c_problem.constraint_forward(x0)
+            with phase("numeric"):
+                b_vec = self.c_problem.constraint_forward(x0)
             A = _build_jacobian_csc(
                 self.c_problem, self.jac_structure, b_vec.shape[0], self.n_vars)
         else:

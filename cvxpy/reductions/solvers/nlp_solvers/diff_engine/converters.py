@@ -26,6 +26,7 @@ from cvxpy.atoms.quad_form import QuadForm
 from cvxpy.atoms.quad_over_lin import quad_over_lin
 from cvxpy.expressions.constants.parameter import is_param_free
 from cvxpy.reductions.solvers.nlp_solvers.diff_engine.helpers import (
+    dense_disabled,
     make_dense_left_matmul,
     make_dense_right_matmul,
     make_sparse_left_matmul,
@@ -149,6 +150,14 @@ def convert_symbolic_quad_form(expr, var_dict, n_vars, param_dict):
                 P_csr.indptr.astype(np.int32),
                 P_csr.shape[0], P_csr.shape[1])
         P_dense = to_dense_float(P_val)
+        if dense_disabled():
+            P_csr = sparse.csr_array(P_dense)
+            return _diffengine.make_quad_form(
+                None, x_c, "sparse",
+                P_csr.data.astype(np.float64),
+                P_csr.indices.astype(np.int32),
+                P_csr.indptr.astype(np.int32),
+                P_csr.shape[0], P_csr.shape[1])
         return _diffengine.make_quad_form(
             None, x_c, "dense", P_dense.flatten(order='F'), x.size)
 

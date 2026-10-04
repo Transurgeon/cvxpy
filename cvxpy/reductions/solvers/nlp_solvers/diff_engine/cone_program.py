@@ -36,7 +36,10 @@ from cvxpy.reductions.matrix_stuffing import (
     extract_mip_idx,
     extract_upper_bounds,
 )
-from cvxpy.reductions.solvers.nlp_solvers.diff_engine.extractor import DiffEngineExtractor
+from cvxpy.reductions.solvers.nlp_solvers.diff_engine.extractor import (
+    DiffEngineExtractor,
+    phase,
+)
 
 
 class _Matrices(NamedTuple):
@@ -60,10 +63,11 @@ def _restructure(matrices: _Matrices, perm) -> _Matrices:
     """
     if perm is None:
         return matrices
-    old_row, row_sign = perm
-    A = sp.csr_array(matrices.A)[old_row]
-    A.data = A.data * np.repeat(row_sign, np.diff(A.indptr))
-    return matrices._replace(A=sp.csc_array(A), b=matrices.b[old_row] * row_sign)
+    with phase("format"):
+        old_row, row_sign = perm
+        A = sp.csr_array(matrices.A)[old_row]
+        A.data = A.data * np.repeat(row_sign, np.diff(A.indptr))
+        return matrices._replace(A=sp.csc_array(A), b=matrices.b[old_row] * row_sign)
 
 
 class DiffengineConeProg(ConeProg):
